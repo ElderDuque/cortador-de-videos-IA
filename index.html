@@ -4,6 +4,10 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Cortador IA — Protótipo</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#ff5a2e">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
@@ -210,6 +214,21 @@
     line-height: 1.5;
   }
 
+  .cut-btn {
+    margin-top: 12px;
+    width: 100%;
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent-dim);
+    border-radius: 6px;
+    padding: 10px;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: 12.5px;
+    cursor: pointer;
+  }
+  .cut-btn:disabled { opacity: 0.5; }
+
   .empty {
     text-align: center;
     color: var(--text-dim);
@@ -265,7 +284,14 @@
 
   <div class="step">
     <div class="step-label"><span class="step-num">2</span>Transcrição do vídeo</div>
-    <textarea id="transcript" placeholder="Cole aqui a transcrição com timestamps, ex:&#10;[00:00] E aí pessoal, hoje eu vou falar sobre...&#10;[00:15] Isso mudou completamente minha forma de pensar...&#10;[00:40] ..."></textarea>
+
+    <label class="field-label">Tem no YouTube? Cola o link (busca a legenda automática):</label>
+    <div class="row" style="margin-bottom: 12px;">
+      <input type="text" id="youtubeUrl" placeholder="https://youtube.com/watch?v=...">
+    </div>
+    <button type="button" class="helper-btn" id="fetchYtBtn" onclick="fetchYoutubeTranscript()" style="margin-bottom: 14px; border-top: none; padding-top:0;">buscar transcrição do link</button>
+
+    <textarea id="transcript" placeholder="Ou cole aqui a transcrição com timestamps, ex:&#10;[00:00] E aí pessoal, hoje eu vou falar sobre...&#10;[00:15] Isso mudou completamente minha forma de pensar...&#10;[00:40] ..."></textarea>
     <button class="helper-btn" onclick="loadSample()">usar exemplo de teste</button>
   </div>
 
@@ -288,6 +314,8 @@
           <option value="60" selected>60s</option>
           <option value="90">90s</option>
           <option value="180">3min</option>
+          <option value="300">5min</option>
+          <option value="600">10min</option>
         </select>
       </div>
     </div>
@@ -301,7 +329,7 @@
       <div class="empty">Os cortes sugeridos vão aparecer aqui</div>
     </div>
 
-    <div class="note">Este protótipo usa transcrição colada manualmente. Na versão final (Firebase), o vídeo seria transcrito automaticamente ao ser enviado.</div>
+    <div class="note">Este protótipo usa transcrição colada manualmente. Na versão final (Firebase), o vídeo seria transcrito automaticamente ao ser enviado.<br><br>O corte roda direto no seu navegador (sem custo). Pode variar 1-2 segundos do tempo exato, e a primeira vez demora mais (baixa o motor de corte).</div>
   </div>
 
 </main>
@@ -312,6 +340,8 @@
 function loadVideo(event) {
   const file = event.target.files[0];
   if (!file) return;
+
+  window.currentVideoFile = file;
 
   const video = document.getElementById('videoPreview');
   const fileName = document.getElementById('fileName');
@@ -325,6 +355,50 @@ function loadVideo(event) {
     fileName.textContent = 'Não consegui carregar esse arquivo. Tenta outro formato de vídeo.';
     fileName.style.display = 'block';
     console.error(err);
+  }
+}
+
+async function fetchYoutubeTranscript() {
+  const url = document.getElementById('youtubeUrl').value.trim();
+  const btn = document.getElementById('fetchYtBtn');
+  const textarea = document.getElementById('transcript');
+
+  if (!url) {
+    alert('Cola o link do YouTube primeiro.');
+    return;
+  }
+
+  const originalText = btn.textContent;
+  btn.textContent = 'Buscando transcrição...';
+  btn.disabled = true;
+
+  try {
+    const response = await fetch("https://chipper-entremet-a2e69d.netlify.app/.netlify/functions/youtubeTranscript", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url })
+    });
+
+    const raw = await response.text();
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch (e) {
+      throw new Error(`Resposta inesperada (status ${response.status})`);
+    }
+
+    if (!response.ok || data.error) {
+      throw new Error(data.error || `Erro ${response.status}`);
+    }
+
+    textarea.value = data.transcript;
+    btn.textContent = '✓ Transcrição carregada';
+  } catch (err) {
+    alert('Não consegui buscar a transcrição: ' + err.message + '\n\nVocê ainda pode colar a transcrição manualmente abaixo.');
+    btn.textContent = originalText;
+  } finally {
+    btn.disabled = false;
+    setTimeout(() => { btn.textContent = originalText; }, 3000);
   }
 }
 
@@ -368,7 +442,9 @@ TRANSCRIÇÃO:
 ${transcript}
 
 TAREFA:
-Sugira de 2 a 4 cortes (clipes) dessa transcrição, cada um com duração entre ${minDur} e ${maxDur} segundos, que tenham potencial de viralizar em redes sociais (Reels, TikTok, Shorts).
+Sugira o máximo de cortes (clipes) bons que você encontrar nessa transcrição — não se limite a poucos, pode sugerir até 8 se houver conteúdo forte suficiente. A maioria deve ter duração entre ${minDur} e ${maxDur} segundos, mas se houver algum trecho especialmente forte que só funcione bem um pouco mais longo que o máximo escolhido, inclua ele também como sugestão extra (marcando isso no campo "reason").
+
+Considere potencial de viralizar em redes sociais (Reels, TikTok, Shorts).
 
 Para cada corte, considere: um gancho forte no início, uma ideia completa e autocontida, e um momento de virada ou revelação.
 
@@ -386,25 +462,36 @@ Responda APENAS com um JSON válido, sem texto antes ou depois, nesse formato ex
 }`;
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch("https://chipper-entremet-a2e69d.netlify.app/.netlify/functions/suggestCuts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 1000,
-        messages: [{ role: "user", content: prompt }]
-      })
+      body: JSON.stringify({ prompt })
     });
 
-    const data = await response.json();
-    const textBlock = data.content.find(b => b.type === "text");
-    let raw = textBlock ? textBlock.text : "{}";
+    const raw_response_text = await response.text();
+    let data;
+    try {
+      data = JSON.parse(raw_response_text);
+    } catch (e) {
+      throw new Error(`Resposta não é JSON (status ${response.status}): ${raw_response_text.slice(0, 300)}`);
+    }
+
+    if (!response.ok) {
+      throw new Error(`Erro ${response.status}: ${JSON.stringify(data).slice(0, 300)}`);
+    }
+
+    if (data.error) {
+      throw new Error(`Erro da API: ${JSON.stringify(data.error).slice(0, 300)}`);
+    }
+
+    const textBlock = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    let raw = textBlock || "{}";
     raw = raw.replace(/```json|```/g, "").trim();
     const parsed = JSON.parse(raw);
 
     renderClips(parsed.clips || []);
   } catch (err) {
-    results.innerHTML = '<div class="empty">Erro ao gerar sugestões. Tenta de novo.</div>';
+    results.innerHTML = `<div class="empty">Erro: ${err.message}</div>`;
     console.error(err);
   } finally {
     btn.disabled = false;
@@ -419,7 +506,7 @@ function renderClips(clips) {
     return;
   }
 
-  results.innerHTML = clips.map(c => `
+  results.innerHTML = clips.map((c, i) => `
     <div class="clip-card">
       <div class="clip-top">
         <span class="clip-time mono">${c.start} — ${c.end}</span>
@@ -427,10 +514,101 @@ function renderClips(clips) {
       </div>
       <div class="clip-title">${c.title}</div>
       <div class="clip-reason">${c.reason}</div>
+      <button type="button" class="cut-btn" id="cutBtn${i}" onclick="cutClip('${c.start}','${c.end}','${c.title.replace(/'/g, "").replace(/"/g,'')}', ${i})">Baixar corte</button>
     </div>
   `).join('');
 }
 </script>
 
 </body>
+<script type="module">
+import { FFmpeg } from "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.js";
+import { fetchFile, toBlobURL } from "https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/esm/index.js";
+
+let ffmpegInstance = null;
+
+async function getFFmpeg(onProgress) {
+  if (ffmpegInstance) return ffmpegInstance;
+  onProgress('Baixando motor de corte (só na primeira vez, ~30MB)...');
+  const ff = new FFmpeg();
+  const baseURL = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm";
+  await ff.load({
+    coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
+    wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
+  });
+  ffmpegInstance = ff;
+  return ff;
+}
+
+function timeToSeconds(t) {
+  const parts = t.split(':').map(Number);
+  return parts.length === 3 ? parts[0]*3600 + parts[1]*60 + parts[2] : parts[0]*60 + parts[1];
+}
+
+window.cutClip = async function (start, end, title, idx) {
+  const btn = document.getElementById('cutBtn' + idx);
+  const file = window.currentVideoFile;
+
+  if (!file) {
+    alert('Escolhe o vídeo primeiro lá em cima (etapa 1).');
+    return;
+  }
+
+  const originalText = btn.textContent;
+  btn.disabled = true;
+
+  try {
+    const ff = await getFFmpeg((msg) => { btn.textContent = msg; });
+    btn.textContent = 'Cortando...';
+
+    const inputName = 'input_' + Date.now() + '.mp4';
+    const outputName = 'output_' + Date.now() + '.mp4';
+
+    await ff.writeFile(inputName, await fetchFile(file));
+
+    const startSec = timeToSeconds(start);
+    const endSec = timeToSeconds(end);
+    const duration = Math.max(1, endSec - startSec);
+
+    await ff.exec([
+      '-ss', String(startSec),
+      '-i', inputName,
+      '-t', String(duration),
+      '-c', 'copy',
+      outputName
+    ]);
+
+    const data = await ff.readFile(outputName);
+    const blob = new Blob([data.buffer], { type: 'video/mp4' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = (title || 'corte').slice(0, 60).replace(/[^\w\s-]/g, '') + '.mp4';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    await ff.deleteFile(inputName);
+    await ff.deleteFile(outputName);
+
+    btn.textContent = '✓ Baixado';
+  } catch (err) {
+    console.error(err);
+    btn.textContent = 'Erro — tenta de novo';
+    alert('Erro ao cortar: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    setTimeout(() => { btn.textContent = originalText; }, 3000);
+  }
+};
+</script>
+
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('service-worker.js').catch(console.error);
+  });
+}
+</script>
 </html>
