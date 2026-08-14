@@ -659,17 +659,43 @@ import { fetchFile, toBlobURL } from "https://unpkg.com/@ffmpeg/util@0.12.1/dist
 
 let ffmpegInstance = null;
 
+async function fetchWithProgress(url, mimeType, onProgress) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(`Falha ao baixar ${url} (status ${response.status})`);
+
+  const contentLength = response.headers.get('content-length');
+  const total = contentLength ? parseInt(contentLength, 10) : 0;
+  const reader = response.body.getReader();
+  const chunks = [];
+  let received = 0;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+    received += value.length;
+    if (total) {
+      const pct = Math.round((received / total) * 100);
+      onProgress(`Baixando motor de corte... ${pct}% (${(received / 1024 / 1024).toFixed(1)}MB)`);
+    } else {
+      onProgress(`Baixando motor de corte... ${(received / 1024 / 1024).toFixed(1)}MB`);
+    }
+  }
+
+  const blob = new Blob(chunks, { type: mimeType });
+  return URL.createObjectURL(blob);
+}
+
 async function getFFmpeg(onProgress) {
   if (ffmpegInstance) return ffmpegInstance;
-  onProgress('Baixando motor de corte (só na primeira vez, ~30MB)...');
   const ff = new FFmpeg();
   const coreBaseURL = "https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm";
   const ffmpegBaseURL = "https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/esm";
-  await ff.load({
-    coreURL: await toBlobURL(`${coreBaseURL}/ffmpeg-core.js`, "text/javascript"),
-    wasmURL: await toBlobURL(`${coreBaseURL}/ffmpeg-core.wasm`, "application/wasm"),
-    classWorkerURL: await toBlobURL(`${ffmpegBaseURL}/worker.js`, "text/javascript"),
-  });
+  const coreURL = await fetchWithProgress(`${coreBaseURL}/ffmpeg-core.js`, "text/javascript", onProgress);
+  const wasmURL = await fetchWithProgress(`${coreBaseURL}/ffmpeg-core.wasm`, "application/wasm", onProgress);
+  const classWorkerURL = await fetchWithProgress(`${ffmpegBaseURL}/worker.js`, "text/javascript", onProgress);
+  onProgress('Iniciando motor de corte...');
+  await ff.load({ coreURL, wasmURL, classWorkerURL });
   ffmpegInstance = ff;
   return ff;
 }
