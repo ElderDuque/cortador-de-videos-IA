@@ -69,6 +69,64 @@
     padding: 20px;
   }
 
+  .tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .tab-btn {
+    flex: 1;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    color: var(--text-dim);
+    border-radius: 8px;
+    padding: 12px;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  .tab-btn.active {
+    background: var(--accent-dim);
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+
+  .history-entry {
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+
+  .history-date {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+
+  .history-clip {
+    padding: 8px 0;
+    border-top: 1px dashed var(--line);
+  }
+  .history-clip:first-of-type { border-top: none; }
+
+  .history-clip .clip-time {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11.5px;
+    color: var(--accent);
+  }
+
+  .history-clip .clip-title {
+    font-size: 13px;
+    font-weight: 600;
+    margin: 2px 0;
+  }
+
   .step {
     background: var(--panel);
     border: 1px solid var(--line);
@@ -273,6 +331,13 @@
 
 <main>
 
+  <div class="tabs">
+    <button type="button" class="tab-btn active" id="tabNewBtn" onclick="showTab('new')">Novo corte</button>
+    <button type="button" class="tab-btn" id="tabHistoryBtn" onclick="showTab('history')">Histórico</button>
+  </div>
+
+  <div id="viewNew">
+
   <div class="step">
     <div class="step-label"><span class="step-num">1</span>Vídeo</div>
     <input type="file" id="videoFile" accept="video/*,audio/*" onchange="loadVideo(event)" style="position:absolute; width:1px; height:1px; opacity:0; overflow:hidden;">
@@ -332,11 +397,74 @@
     <div class="note">Este protótipo usa transcrição colada manualmente. Na versão final (Firebase), o vídeo seria transcrito automaticamente ao ser enviado.<br><br>O corte roda direto no seu navegador (sem custo). Pode variar 1-2 segundos do tempo exato, e a primeira vez demora mais (baixa o motor de corte).</div>
   </div>
 
+  </div>
+
+  <div id="viewHistory" style="display:none;">
+    <div class="step">
+      <div class="step-label">Sugestões guardadas neste navegador</div>
+      <div id="historyList"></div>
+      <button type="button" class="helper-btn" onclick="clearHistory()" style="margin-top: 14px;">limpar histórico</button>
+    </div>
+  </div>
+
 </main>
 
 <footer>cortador-ia · protótipo funcional</footer>
 
 <script>
+function showTab(tab) {
+  const isNew = tab === 'new';
+  document.getElementById('viewNew').style.display = isNew ? 'block' : 'none';
+  document.getElementById('viewHistory').style.display = isNew ? 'none' : 'block';
+  document.getElementById('tabNewBtn').classList.toggle('active', isNew);
+  document.getElementById('tabHistoryBtn').classList.toggle('active', !isNew);
+  if (!isNew) renderHistory();
+}
+
+function saveToHistory(clips) {
+  if (!clips.length) return;
+  const history = JSON.parse(localStorage.getItem('cortadorHistory') || '[]');
+  const videoName = document.getElementById('fileName').textContent.replace('✓ ', '') || 'sem vídeo';
+
+  history.unshift({
+    date: new Date().toLocaleString('pt-BR'),
+    videoName,
+    clips
+  });
+
+  // guarda só as últimas 20 sessões, pra não pesar o navegador
+  localStorage.setItem('cortadorHistory', JSON.stringify(history.slice(0, 20)));
+}
+
+function renderHistory() {
+  const container = document.getElementById('historyList');
+  const history = JSON.parse(localStorage.getItem('cortadorHistory') || '[]');
+
+  if (!history.length) {
+    container.innerHTML = '<div class="empty">Nenhuma sugestão guardada ainda. Gera um corte na aba "Novo corte" que ele fica salvo aqui.</div>';
+    return;
+  }
+
+  container.innerHTML = history.map(entry => `
+    <div class="history-entry">
+      <div class="history-date">${entry.date} · ${entry.videoName}</div>
+      ${entry.clips.map(c => `
+        <div class="history-clip">
+          <span class="clip-time mono">${c.start} — ${c.end}</span>
+          <div class="clip-title">${c.title}</div>
+        </div>
+      `).join('')}
+    </div>
+  `).join('');
+}
+
+function clearHistory() {
+  if (confirm('Apagar todo o histórico salvo neste navegador?')) {
+    localStorage.removeItem('cortadorHistory');
+    renderHistory();
+  }
+}
+
 function loadVideo(event) {
   const file = event.target.files[0];
   if (!file) return;
@@ -490,6 +618,7 @@ Responda APENAS com um JSON válido, sem texto antes ou depois, nesse formato ex
     const parsed = JSON.parse(raw);
 
     renderClips(parsed.clips || []);
+    saveToHistory(parsed.clips || []);
   } catch (err) {
     results.innerHTML = `<div class="empty">Erro: ${err.message}</div>`;
     console.error(err);
