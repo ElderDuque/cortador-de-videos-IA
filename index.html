@@ -344,13 +344,16 @@
     <label for="videoFile" class="primary" style="display:block; text-align:center; cursor:pointer;">Escolher vídeo</label>
     <div id="fileName" class="note" style="border-top:none; margin-top:8px; padding-top:0; display:none;"></div>
     <video id="videoPreview" controls playsinline style="width:100%; border-radius:8px; margin-top:12px; display:none; background:#000;"></video>
-    <div class="note" style="border-top:none; margin-top:10px; padding-top:0;">O vídeo fica só no seu navegador, não é enviado a lugar nenhum. Serve pra você assistir e cronometrar enquanto monta a transcrição abaixo — a transcrição automática ainda não está conectada nesse protótipo.</div>
+    <div class="note" style="border-top:none; margin-top:10px; padding-top:0;">O vídeo fica só no seu navegador, não é enviado a lugar nenhum. Pra transcrever, ele extrai só o áudio (comprimido) e manda em partes — o vídeo original nunca sai do seu celular.</div>
   </div>
 
   <div class="step">
     <div class="step-label"><span class="step-num">2</span>Transcrição do vídeo</div>
 
-    <label class="field-label">Tem no YouTube? Cola o link (busca a legenda automática):</label>
+    <button type="button" class="primary" id="transcribeBtn" onclick="transcribeVideo()" style="margin-bottom: 14px;">Transcrever vídeo automaticamente</button>
+    <div class="note" style="border-top:none; margin-top:0; padding-top:0; margin-bottom: 14px;">Usa o vídeo que você escolheu na etapa 1. Pra vídeos longos, pode demorar alguns minutos (transcreve em partes).</div>
+
+    <label class="field-label">Ou, se tem no YouTube: cola o link (busca a legenda automática):</label>
     <div class="row" style="margin-bottom: 12px;">
       <input type="text" id="youtubeUrl" placeholder="https://youtube.com/watch?v=...">
     </div>
@@ -673,6 +676,109 @@ function timeToSeconds(t) {
   const parts = t.split(':').map(Number);
   return parts.length === 3 ? parts[0]*3600 + parts[1]*60 + parts[2] : parts[0]*60 + parts[1];
 }
+
+function secToTimestamp(totalSeconds) {
+  const m = Math.floor(totalSeconds / 60);
+  const s = Math.floor(totalSeconds % 60);
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function arrayBufferToBase64(buffer) {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+window.transcribeVideo = async function () {
+  const file = window.currentVideoFile;
+  const btn = document.getElementById('transcribeBtn');
+  const textarea = document.getElementById('transcript');
+
+  if (!file) {
+    alert('Escolhe o vídeo primeiro lá em cima (etapa 1).');
+    return;
+  }
+
+  const originalText = btn.textContent;
+  btn.disabled = true;
+
+  try {
+    const ff = await getFFmpeg((msg) => { btn.textContent = msg; });
+
+    btn.textContent = 'Extraindo áudio...';
+    await ff.writeFile('src_input', await fetchFile(file));
+    await ff.exec(['-i', 'src_input', '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'libopus', '-b:a', '24k', '-f', 'ogg', 'full_audio.ogg']);
+
+    btn.textContent = 'Dividindo em partes...';
+    const CHUNK_SEC = 480;
+    await ff.exec(['-i', 'full_audio.ogg', '-f', 'segment', '-segment_time', String(CHUNK_SEC), '-c', 'copy', 'chunk_%03d.ogg']);
+
+    const video = document.getElementById('videoPreview');
+    const totalDuration = video.duration || CHUNK_SEC;
+    const numChunks = Math.max(1, Math.ceil(totalDuration / CHUNK_SEC));
+
+    const fullTranscript = [];
+
+    for (let i = 0; i < numChunks; i++) {
+      const chunkName = `chunk_${String(i).padStart(3, '0')}.ogg`;
+      let chunkData;
+      try {
+        chunkData = await ff.readFile(chunkName);
+      } catch (e) {
+        break;
+      }
+
+      btn.textContent = `Transcrevendo parte ${i + 1} de ${numChunks}...`;
+
+      const base64 = arrayBufferToBase64(chunkData.buffer);
+
+      const response = await fetch("https://chipper-entremet-a2e69d.netlify.app/.netlify/functions/transcribeAudio", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ audioBase64: base64, mimeType: "audio/ogg" })
+      });
+
+      const raw = await response.text();
+      let data;
+      try { data = JSON.parse(raw); } catch (e) { continue; }
+
+      const textBlock = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (!textBlock) continue;
+
+      const cleaned = textBlock.replace(/```json|```/g, '').trim();
+      let parsed;
+      try { parsed = JSON.parse(cleaned); } catch (e) { continue; }
+
+      const offset = i * CHUNK_SEC;
+      for (const seg of (parsed.segments || [])) {
+        fullTranscript.push(`[${secToTimestamp(offset + (seg.t || 0))}] ${seg.text}`);
+      }
+
+      await ff.deleteFile(chunkName);
+    }
+
+    try { await ff.deleteFile('src_input'); } catch (e) {}
+    try { await ff.deleteFile('full_audio.ogg'); } catch (e) {}
+
+    if (fullTranscript.length === 0) {
+      throw new Error('Não consegui transcrever. Tenta colar a transcrição manualmente.');
+    }
+
+    textarea.value = fullTranscript.join('\n');
+    btn.textContent = '✓ Transcrição pronta';
+  } catch (err) {
+    console.error(err);
+    alert('Erro ao transcrever: ' + err.message);
+    btn.textContent = originalText;
+  } finally {
+    btn.disabled = false;
+    setTimeout(() => { btn.textContent = originalText; }, 4000);
+  }
+};
 
 window.cutClip = async function (start, end, title, idx) {
   const btn = document.getElementById('cutBtn' + idx);
