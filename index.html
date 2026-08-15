@@ -381,6 +381,14 @@
   <div class="step">
     <div class="step-label"><span class="step-num">2</span>Transcrição do vídeo</div>
 
+    <div id="libraryBox" style="display:none; margin-bottom:16px;">
+      <label class="field-label">Já usou esse vídeo antes? Carrega da sua biblioteca:</label>
+      <div class="row" style="margin-bottom: 8px;">
+        <select id="librarySelect"></select>
+      </div>
+      <button type="button" class="helper-btn" onclick="loadFromLibrary()" style="border-top:none; padding-top:0;">carregar transcrição salva</button>
+    </div>
+
     <label class="field-label">Tem no YouTube? Cola o link (busca a legenda automática):</label>
     <div class="row" style="margin-bottom: 12px;">
       <input type="text" id="youtubeUrl" placeholder="https://youtube.com/watch?v=...">
@@ -397,6 +405,7 @@
 
     <textarea id="transcript" placeholder="Ou cole aqui a transcrição com timestamps, ex:&#10;[00:00] E aí pessoal, hoje eu vou falar sobre...&#10;[00:15] Isso mudou completamente minha forma de pensar...&#10;[00:40] ..."></textarea>
     <button class="helper-btn" onclick="loadSample()">usar exemplo de teste</button>
+    <button class="helper-btn" onclick="saveCurrentToLibrary()" style="border-top:none; padding-top:8px;">salvar essa transcrição na biblioteca</button>
   </div>
 
   <div class="step">
@@ -431,10 +440,8 @@
 
     <div class="note" style="border-top:none; margin-top:14px; padding-top:0; text-align:center;">— ou —</div>
 
-    <label class="field-label" style="margin-top:14px;">Procurando um trecho específico? Descreve o tema/título:</label>
-    <div class="row" style="margin-bottom: 8px;">
-      <input type="text" id="titleSearch" placeholder="Ex: quando ele fala sobre perdão">
-    </div>
+    <label class="field-label" style="margin-top:14px;">Procurando um trecho específico? Descreve o tema/título, ou cola um pedaço da fala que você lembra:</label>
+    <textarea id="titleSearch" placeholder="Ex: 'quando ele fala sobre perdão' — ou cola um trecho aproximado tipo 'algo sobre não guardar mágoa do próximo'" style="min-height: 80px; margin-bottom: 8px;"></textarea>
 
     <label class="field-label">Ou manda um print de uma sugestão que você viu em outro app:</label>
     <input type="file" id="screenshotFile" accept="image/*" onchange="loadScreenshot(event)" style="position:absolute; width:1px; height:1px; opacity:0; overflow:hidden;">
@@ -584,6 +591,85 @@ function copyVideoTitle() {
   });
 }
 
+function getLibrary() {
+  return JSON.parse(localStorage.getItem('cortadorLibrary') || '[]');
+}
+
+function saveLibrary(library) {
+  localStorage.setItem('cortadorLibrary', JSON.stringify(library.slice(0, 30)));
+}
+
+function saveToLibrary(key, title, transcript) {
+  if (!transcript) return;
+  const library = getLibrary();
+  const existingIdx = library.findIndex(item => item.key === key);
+  const entry = { key, title: title || key, transcript, date: new Date().toLocaleString('pt-BR') };
+
+  if (existingIdx >= 0) {
+    library[existingIdx] = entry;
+  } else {
+    library.unshift(entry);
+  }
+  saveLibrary(library);
+  refreshLibraryUI();
+}
+
+function getFromLibrary(key) {
+  return getLibrary().find(item => item.key === key) || null;
+}
+
+function refreshLibraryUI() {
+  const library = getLibrary();
+  const box = document.getElementById('libraryBox');
+  const select = document.getElementById('librarySelect');
+
+  if (!library.length) {
+    box.style.display = 'none';
+    return;
+  }
+
+  box.style.display = 'block';
+  select.innerHTML = library.map((item, i) =>
+    `<option value="${i}">${item.title}</option>`
+  ).join('');
+}
+
+function loadFromLibrary() {
+  const select = document.getElementById('librarySelect');
+  const library = getLibrary();
+  const item = library[parseInt(select.value, 10)];
+  if (!item) return;
+
+  document.getElementById('transcript').value = item.transcript;
+
+  if (item.title) {
+    window.currentYoutubeTitle = item.title;
+    document.getElementById('videoTitleInput').value = item.title;
+    document.getElementById('videoTitleBox').style.display = 'block';
+  }
+}
+
+function saveCurrentToLibrary() {
+  const transcript = document.getElementById('transcript').value.trim();
+  if (!transcript) {
+    alert('Não tem transcrição pra salvar ainda.');
+    return;
+  }
+
+  const suggested = window.currentYoutubeTitle || '';
+  const title = prompt('Nome pra identificar esse vídeo na biblioteca:', suggested);
+  if (!title) return;
+
+  const key = window.currentYoutubeVideoId || ('manual_' + Date.now());
+  saveToLibrary(key, title, transcript);
+  alert('Salvo na biblioteca!');
+}
+
+function extractYoutubeId(url) {
+  const m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/|youtube\.com\/embed\/)([\w-]{11})/);
+  return m ? m[1] : null;
+}
+
 async function fetchYoutubeTranscript() {
   const url = document.getElementById('youtubeUrl').value.trim();
   const btn = document.getElementById('fetchYtBtn');
@@ -595,6 +681,22 @@ async function fetchYoutubeTranscript() {
   }
 
   const originalText = btn.textContent;
+
+  const videoId = extractYoutubeId(url);
+  if (videoId) {
+    const cached = getFromLibrary(videoId);
+    if (cached) {
+      textarea.value = cached.transcript;
+      window.currentYoutubeTitle = cached.title;
+      window.currentYoutubeVideoId = videoId;
+      document.getElementById('videoTitleInput').value = cached.title;
+      document.getElementById('videoTitleBox').style.display = 'block';
+      btn.textContent = '✓ Carregado da biblioteca (já tinha salvo)';
+      setTimeout(() => { btn.textContent = originalText; }, 3000);
+      return;
+    }
+  }
+
   btn.textContent = 'Buscando transcrição...';
   btn.disabled = true;
 
@@ -621,8 +723,13 @@ async function fetchYoutubeTranscript() {
 
     if (data.title) {
       window.currentYoutubeTitle = data.title;
+      window.currentYoutubeVideoId = videoId;
       document.getElementById('videoTitleInput').value = data.title;
       document.getElementById('videoTitleBox').style.display = 'block';
+
+      if (videoId) {
+        saveToLibrary(videoId, data.title, data.transcript);
+      }
     }
 
     btn.textContent = '✓ Transcrição carregada';
@@ -781,7 +888,7 @@ async function suggestByTitle() {
   } else if (currentScreenshotBase64) {
     taskDescription = `O usuário anexou um print de uma sugestão de corte que viu em outro app (de OUTRO vídeo — ignore qualquer tempo/timestamp que apareça na imagem, ele não se aplica aqui). Primeiro, entenda pela imagem qual é o TEMA/ASSUNTO dessa sugestão (não o vídeo em si, só o tipo de conteúdo/gancho). Depois, procure algo parecido nessa transcrição.`;
   } else {
-    taskDescription = `O usuário está procurando um trecho sobre: "${topic}"`;
+    taskDescription = `O usuário está procurando um trecho sobre: "${topic}" — pode ser uma descrição do tema, ou um pedaço aproximado de uma fala que ele lembra (nem sempre com as palavras exatas). Busca por semelhança de sentido, não só por texto idêntico.`;
   }
 
   const prompt = `Você é um editor de vídeo. Abaixo está a transcrição de um vídeo, com timestamps no formato [MM:SS].
@@ -833,6 +940,8 @@ function renderClips(clips, historyIndex) {
 
   results.innerHTML = clips.map((c, i) => clipCardHtml(c, historyIndex, i)).join('');
 }
+
+refreshLibraryUI();
 </script>
 
 </body>
