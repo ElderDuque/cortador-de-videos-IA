@@ -387,6 +387,14 @@
     </div>
     <button type="button" class="helper-btn" id="fetchYtBtn" onclick="fetchYoutubeTranscript()" style="margin-bottom: 14px; border-top: none; padding-top:0;">buscar transcrição do link</button>
 
+    <div id="videoTitleBox" style="display:none; margin-bottom:14px;">
+      <label class="field-label">Título do vídeo:</label>
+      <div class="row">
+        <input type="text" id="videoTitleInput" readonly style="flex:1;">
+      </div>
+      <button type="button" class="helper-btn" onclick="copyVideoTitle()" style="border-top:none; padding-top:6px;">copiar título</button>
+    </div>
+
     <textarea id="transcript" placeholder="Ou cole aqui a transcrição com timestamps, ex:&#10;[00:00] E aí pessoal, hoje eu vou falar sobre...&#10;[00:15] Isso mudou completamente minha forma de pensar...&#10;[00:40] ..."></textarea>
     <button class="helper-btn" onclick="loadSample()">usar exemplo de teste</button>
   </div>
@@ -427,6 +435,12 @@
     <div class="row" style="margin-bottom: 8px;">
       <input type="text" id="titleSearch" placeholder="Ex: quando ele fala sobre perdão">
     </div>
+
+    <label class="field-label">Ou manda um print de uma sugestão que você viu em outro app:</label>
+    <input type="file" id="screenshotFile" accept="image/*" onchange="loadScreenshot(event)" style="position:absolute; width:1px; height:1px; opacity:0; overflow:hidden;">
+    <label for="screenshotFile" class="helper-btn" style="display:inline-block; border-top:none; padding-top:0; margin-bottom: 10px; cursor:pointer;">anexar print</label>
+    <div id="screenshotName" class="note" style="border-top:none; margin-top:0; padding-top:0; display:none; margin-bottom: 10px;"></div>
+
     <button type="button" class="primary" id="titleSearchBtn" onclick="suggestByTitle()" style="background: var(--panel-2); color: var(--accent); border: 1px solid var(--accent-dim);">Buscar trecho que combine</button>
 
     <div class="results" id="results">
@@ -463,7 +477,8 @@ function showTab(tab) {
 function saveToHistory(clips) {
   if (!clips.length) return null;
   const history = JSON.parse(localStorage.getItem('cortadorHistory') || '[]');
-  const videoName = document.getElementById('fileName').textContent.replace('✓ ', '') || 'sem vídeo';
+  const fileNameText = document.getElementById('fileName').textContent.replace('✓ ', '');
+  const videoName = fileNameText || window.currentYoutubeTitle || 'sem vídeo';
 
   const entry = {
     date: new Date().toLocaleString('pt-BR'),
@@ -556,6 +571,19 @@ function loadVideo(event) {
   }
 }
 
+function copyVideoTitle() {
+  const input = document.getElementById('videoTitleInput');
+  input.select();
+  navigator.clipboard.writeText(input.value).then(() => {
+    const btn = event.target;
+    const original = btn.textContent;
+    btn.textContent = '✓ copiado!';
+    setTimeout(() => { btn.textContent = original; }, 2000);
+  }).catch(() => {
+    document.execCommand('copy');
+  });
+}
+
 async function fetchYoutubeTranscript() {
   const url = document.getElementById('youtubeUrl').value.trim();
   const btn = document.getElementById('fetchYtBtn');
@@ -590,6 +618,13 @@ async function fetchYoutubeTranscript() {
     }
 
     textarea.value = data.transcript;
+
+    if (data.title) {
+      window.currentYoutubeTitle = data.title;
+      document.getElementById('videoTitleInput').value = data.title;
+      document.getElementById('videoTitleBox').style.display = 'block';
+    }
+
     btn.textContent = '✓ Transcrição carregada';
   } catch (err) {
     alert('Não consegui buscar a transcrição: ' + err.message + '\n\nVocê ainda pode colar a transcrição manualmente abaixo.');
@@ -616,11 +651,11 @@ function loadSample() {
 [03:00] Obrigado por assistir até aqui, deixa nos comentários se você já passou por algo parecido.`;
 }
 
-async function callAI(prompt) {
+async function callAI(prompt, imageBase64, imageMimeType) {
   const response = await fetch("https://chipper-entremet-a2e69d.netlify.app/.netlify/functions/suggestCuts", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt })
+    body: JSON.stringify({ prompt, imageBase64, imageMimeType })
   });
 
   const raw_response_text = await response.text();
@@ -700,6 +735,24 @@ Responda APENAS com um JSON válido, sem texto antes ou depois, nesse formato ex
   }
 }
 
+let currentScreenshotBase64 = null;
+let currentScreenshotMimeType = null;
+
+function loadScreenshot(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    currentScreenshotBase64 = reader.result.split(',')[1];
+    currentScreenshotMimeType = file.type || 'image/jpeg';
+    const nameEl = document.getElementById('screenshotName');
+    nameEl.textContent = '✓ ' + file.name;
+    nameEl.style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+}
+
 async function suggestByTitle() {
   const transcript = document.getElementById('transcript').value.trim();
   const minDur = document.getElementById('minDur').value;
@@ -712,8 +765,8 @@ async function suggestByTitle() {
     results.innerHTML = '<div class="empty">Cole uma transcrição primeiro (ou clique em "usar exemplo de teste")</div>';
     return;
   }
-  if (!topic) {
-    alert('Descreve o tema ou título que você está procurando.');
+  if (!topic && !currentScreenshotBase64) {
+    alert('Descreve o tema, ou anexa um print, pra eu saber o que procurar.');
     return;
   }
 
@@ -722,15 +775,24 @@ async function suggestByTitle() {
   btn.textContent = 'Buscando...';
   results.innerHTML = '<div class="loading">A IA está procurando o trecho que combina...</div>';
 
+  let taskDescription = '';
+  if (topic && currentScreenshotBase64) {
+    taskDescription = `O usuário está procurando um trecho sobre: "${topic}", e também anexou um print de uma sugestão que viu em outro app (de OUTRO vídeo — ignore qualquer tempo/timestamp que apareça na imagem, ele não se aplica aqui). Olha a imagem pra entender o tipo de conteúdo/tema que ele curtiu, combina com a descrição em texto, e usa isso pra buscar.`;
+  } else if (currentScreenshotBase64) {
+    taskDescription = `O usuário anexou um print de uma sugestão de corte que viu em outro app (de OUTRO vídeo — ignore qualquer tempo/timestamp que apareça na imagem, ele não se aplica aqui). Primeiro, entenda pela imagem qual é o TEMA/ASSUNTO dessa sugestão (não o vídeo em si, só o tipo de conteúdo/gancho). Depois, procure algo parecido nessa transcrição.`;
+  } else {
+    taskDescription = `O usuário está procurando um trecho sobre: "${topic}"`;
+  }
+
   const prompt = `Você é um editor de vídeo. Abaixo está a transcrição de um vídeo, com timestamps no formato [MM:SS].
 
 TRANSCRIÇÃO:
 ${transcript}
 
 TAREFA:
-O usuário está procurando um trecho sobre: "${topic}"
+${taskDescription}
 
-Encontre até 3 trechos dessa transcrição que melhor combinem com esse tema/título, com duração entre ${minDur} e ${maxDur} segundos cada. Se não encontrar nada relacionado, retorne uma lista vazia — não invente.
+Encontre até 3 trechos dessa transcrição que melhor combinem com esse tema, com duração entre ${minDur} e ${maxDur} segundos cada. Se não encontrar nada relacionado, retorne uma lista vazia — não invente.
 
 Responda APENAS com um JSON válido, sem texto antes ou depois, nesse formato exato:
 {
@@ -740,13 +802,13 @@ Responda APENAS com um JSON válido, sem texto antes ou depois, nesse formato ex
       "end": "MM:SS",
       "title": "título curto pro clipe",
       "score": número de 0 a 100 indicando o quanto combina com o tema pedido,
-      "reason": "por que esse trecho combina com '${topic}'"
+      "reason": "por que esse trecho combina"
     }
   ]
 }`;
 
   try {
-    const parsed = await callAI(prompt);
+    const parsed = await callAI(prompt, currentScreenshotBase64, currentScreenshotMimeType);
     if (!parsed.clips || parsed.clips.length === 0) {
       results.innerHTML = '<div class="empty">Não encontrei nada sobre isso nessa transcrição. Tenta descrever de outro jeito.</div>';
       return;
