@@ -432,6 +432,19 @@
         </select>
       </div>
     </div>
+
+    <label class="field-label" style="margin-top:16px;">Analisar só um trecho do vídeo? (opcional)</label>
+    <div class="row">
+      <div>
+        <label class="field-label">A partir de</label>
+        <input type="text" id="rangeStart" placeholder="ex: 57:00">
+      </div>
+      <div>
+        <label class="field-label">Até (vazio = fim)</label>
+        <input type="text" id="rangeEnd" placeholder="ex: 1:45:00">
+      </div>
+    </div>
+    <div class="note" style="border-top:none; margin-top:8px; padding-top:0;">Útil pra vídeos longos — ex: analisar só depois dos 57 minutos, ignorando o resto. Formato MM:SS ou HH:MM:SS.</div>
   </div>
 
   <div class="step">
@@ -758,6 +771,42 @@ function loadSample() {
 [03:00] Obrigado por assistir até aqui, deixa nos comentários se você já passou por algo parecido.`;
 }
 
+function parseFlexibleTime(t) {
+  if (!t) return null;
+  const parts = t.trim().split(':').map(Number);
+  if (parts.some(isNaN)) return null;
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  return null;
+}
+
+function filterTranscriptByRange(transcript, startText, endText) {
+  const startSec = parseFlexibleTime(startText);
+  const endSec = parseFlexibleTime(endText);
+  if (startSec === null && endSec === null) return transcript;
+
+  const lines = transcript.split('\n');
+  const kept = lines.filter(line => {
+    const m = line.match(/^\[(\d{1,2}):(\d{2})(?::(\d{2}))?\]/);
+    if (!m) return true; // linha sem timestamp reconhecido, mantém por segurança
+    const lineSec = m[3]
+      ? parseInt(m[1]) * 3600 + parseInt(m[2]) * 60 + parseInt(m[3])
+      : parseInt(m[1]) * 60 + parseInt(m[2]);
+    if (startSec !== null && lineSec < startSec) return false;
+    if (endSec !== null && lineSec > endSec) return false;
+    return true;
+  });
+
+  return kept.join('\n');
+}
+
+function getFilteredTranscript() {
+  const full = document.getElementById('transcript').value.trim();
+  const startText = document.getElementById('rangeStart').value.trim();
+  const endText = document.getElementById('rangeEnd').value.trim();
+  return filterTranscriptByRange(full, startText, endText);
+}
+
 async function callAI(prompt, imageBase64, imageMimeType) {
   const response = await fetch("https://chipper-entremet-a2e69d.netlify.app/.netlify/functions/suggestCuts", {
     method: "POST",
@@ -787,14 +836,19 @@ async function callAI(prompt, imageBase64, imageMimeType) {
 }
 
 async function suggestCuts() {
-  const transcript = document.getElementById('transcript').value.trim();
+  const fullTranscript = document.getElementById('transcript').value.trim();
+  const transcript = getFilteredTranscript();
   const minDur = document.getElementById('minDur').value;
   const maxDur = document.getElementById('maxDur').value;
   const btn = document.getElementById('runBtn');
   const results = document.getElementById('results');
 
-  if (!transcript) {
+  if (!fullTranscript) {
     results.innerHTML = '<div class="empty">Cole uma transcrição primeiro (ou clique em "usar exemplo de teste")</div>';
+    return;
+  }
+  if (!transcript) {
+    results.innerHTML = '<div class="empty">Nenhuma linha da transcrição caiu dentro do intervalo de tempo informado. Confere os campos "a partir de" / "até".</div>';
     return;
   }
 
@@ -861,15 +915,20 @@ function loadScreenshot(event) {
 }
 
 async function suggestByTitle() {
-  const transcript = document.getElementById('transcript').value.trim();
+  const fullTranscript = document.getElementById('transcript').value.trim();
+  const transcript = getFilteredTranscript();
   const minDur = document.getElementById('minDur').value;
   const maxDur = document.getElementById('maxDur').value;
   const topic = document.getElementById('titleSearch').value.trim();
   const btn = document.getElementById('titleSearchBtn');
   const results = document.getElementById('results');
 
-  if (!transcript) {
+  if (!fullTranscript) {
     results.innerHTML = '<div class="empty">Cole uma transcrição primeiro (ou clique em "usar exemplo de teste")</div>';
+    return;
+  }
+  if (!transcript) {
+    results.innerHTML = '<div class="empty">Nenhuma linha da transcrição caiu dentro do intervalo de tempo informado. Confere os campos "a partir de" / "até".</div>';
     return;
   }
   if (!topic && !currentScreenshotBase64) {
