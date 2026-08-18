@@ -318,6 +318,50 @@
     font-weight: 400;
   }
 
+  .nudge-btn {
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    color: var(--text-dim);
+    border-radius: 6px;
+    padding: 8px 6px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  #adjustPanel input[type="text"], [id^="adjustPanel"] input[type="text"] {
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 8px 4px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    width: 100%;
+  }
+
+  .transcript-context {
+    margin-top: 10px;
+  }
+
+  .context-block {
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.5;
+    padding: 8px 0;
+    border-top: 1px dashed var(--line);
+  }
+  .context-block:first-child { border-top: none; }
+
+  .context-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10.5px;
+    color: var(--accent);
+    display: block;
+    margin-bottom: 3px;
+  }
+
   .empty {
     text-align: center;
     color: var(--text-dim);
@@ -515,6 +559,7 @@ function saveToHistory(clips) {
 
 function clipCardHtml(c, historyIndex, i) {
   const safeTitle = (c.title || '').replace(/'/g, "").replace(/"/g, '');
+  const suffix = `${historyIndex}_${i}`;
   return `
     <div class="clip-card ${c.used ? 'clip-used' : ''}">
       <div class="clip-top">
@@ -523,11 +568,84 @@ function clipCardHtml(c, historyIndex, i) {
       </div>
       <div class="clip-title">${c.title}${c.used ? ' <span class="used-badge">✓ já usado</span>' : ''}</div>
       <div class="clip-reason">${c.reason}</div>
+
+      <button type="button" class="helper-btn" onclick="toggleAdjustPanel('${suffix}')" style="border-top:none; padding-top:0; margin-top:10px;">ajustar / pré-visualizar</button>
+
+      <div id="adjustPanel${suffix}" style="display:none; margin-top:10px; padding-top:10px; border-top: 1px dashed var(--line);">
+        <div class="row">
+          <div>
+            <label class="field-label">Início</label>
+            <div class="row" style="gap:4px;">
+              <button type="button" class="nudge-btn" onclick="nudgeTime('${suffix}','startInput',-1)">−1s</button>
+              <input type="text" id="startInput${suffix}" class="mono" value="${c.start}" style="text-align:center;">
+              <button type="button" class="nudge-btn" onclick="nudgeTime('${suffix}','startInput',1)">+1s</button>
+            </div>
+          </div>
+          <div>
+            <label class="field-label">Fim</label>
+            <div class="row" style="gap:4px;">
+              <button type="button" class="nudge-btn" onclick="nudgeTime('${suffix}','endInput',-1)">−1s</button>
+              <input type="text" id="endInput${suffix}" class="mono" value="${c.end}" style="text-align:center;">
+              <button type="button" class="nudge-btn" onclick="nudgeTime('${suffix}','endInput',1)">+1s</button>
+            </div>
+          </div>
+        </div>
+
+        <button type="button" class="helper-btn" onclick="previewClip('${suffix}')" style="border-top:none; padding-top:10px;">▶ pré-visualizar esse trecho no vídeo</button>
+        <div class="note" style="border-top:none; margin-top:0; padding-top:0;">Precisa ter escolhido o vídeo na etapa 1 pra prévia funcionar.</div>
+
+        <div id="transcriptContext${suffix}" class="transcript-context"></div>
+      </div>
+
       <div class="clip-actions">
-        <button type="button" class="cut-btn" id="cutBtn${historyIndex}_${i}" onclick="cutClip('${c.start}','${c.end}','${safeTitle}','${historyIndex}_${i}')">Baixar corte</button>
+        <button type="button" class="cut-btn" id="cutBtn${suffix}" onclick="cutClip('${safeTitle}','${suffix}')">Baixar corte</button>
         <button type="button" class="used-btn" onclick="toggleUsed(${historyIndex}, ${i})">${c.used ? 'Desmarcar' : 'Marcar como usado'}</button>
       </div>
     </div>
+  `;
+}
+
+function toggleAdjustPanel(suffix) {
+  const panel = document.getElementById('adjustPanel' + suffix);
+  const isOpen = panel.style.display !== 'none';
+  panel.style.display = isOpen ? 'none' : 'block';
+  if (!isOpen) updateTranscriptContext(suffix);
+}
+
+function nudgeTime(suffix, field, deltaSeconds) {
+  const input = document.getElementById(field + suffix);
+  const sec = Math.max(0, timeToSeconds(input.value) + deltaSeconds);
+  input.value = secToTimestamp(sec);
+  updateTranscriptContext(suffix);
+}
+
+function secToTimestamp(totalSeconds) {
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = Math.floor(totalSeconds % 60);
+  if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function updateTranscriptContext(suffix) {
+  const startSec = timeToSeconds(document.getElementById('startInput' + suffix).value);
+  const endSec = timeToSeconds(document.getElementById('endInput' + suffix).value);
+  const fullTranscript = document.getElementById('transcript').value;
+
+  const lines = fullTranscript.split('\n').map(line => {
+    const m = line.match(/^\[(\d{1,2}):(\d{2})(?::(\d{2}))?\]\s*(.*)/);
+    if (!m) return null;
+    const sec = m[3] ? parseInt(m[1]) * 3600 + parseInt(m[2]) * 60 + parseInt(m[3]) : parseInt(m[1]) * 60 + parseInt(m[2]);
+    return { sec, text: line };
+  }).filter(Boolean);
+
+  const before = lines.filter(l => l.sec >= startSec - 20 && l.sec < startSec);
+  const after = lines.filter(l => l.sec > endSec && l.sec <= endSec + 20);
+
+  const box = document.getElementById('transcriptContext' + suffix);
+  box.innerHTML = `
+    <div class="context-block"><span class="context-label">Antes do corte:</span> ${before.length ? before.map(l => l.text).join(' ') : '(início da transcrição)'}</div>
+    <div class="context-block"><span class="context-label">Depois do corte:</span> ${after.length ? after.map(l => l.text).join(' ') : '(fim da transcrição)'}</div>
   `;
 }
 
@@ -1010,7 +1128,32 @@ function timeToSeconds(t) {
   return parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + parts[1];
 }
 
-window.cutClip = async function (start, end, title, idx) {
+async function previewClip(suffix) {
+  const videoEl = document.getElementById('videoPreview');
+
+  if (!window.currentVideoFile) {
+    alert('Escolhe o vídeo primeiro lá em cima (etapa 1).');
+    return;
+  }
+
+  const startSec = timeToSeconds(document.getElementById('startInput' + suffix).value);
+  const endSec = timeToSeconds(document.getElementById('endInput' + suffix).value);
+
+  videoEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  videoEl.muted = false;
+  videoEl.currentTime = startSec;
+
+  const onTimeUpdate = () => {
+    if (videoEl.currentTime >= endSec) {
+      videoEl.pause();
+      videoEl.removeEventListener('timeupdate', onTimeUpdate);
+    }
+  };
+  videoEl.addEventListener('timeupdate', onTimeUpdate);
+  videoEl.play();
+}
+
+window.cutClip = async function (title, idx) {
   const btn = document.getElementById('cutBtn' + idx);
   const videoEl = document.getElementById('videoPreview');
 
@@ -1024,8 +1167,10 @@ window.cutClip = async function (start, end, title, idx) {
     return;
   }
 
-  const startSec = timeToSeconds(start);
-  const endSec = timeToSeconds(end);
+  const startInput = document.getElementById('startInput' + idx);
+  const endInput = document.getElementById('endInput' + idx);
+  const startSec = timeToSeconds(startInput ? startInput.value : '0:00');
+  const endSec = timeToSeconds(endInput ? endInput.value : '0:00');
   const duration = Math.max(1, endSec - startSec);
 
   const originalText = btn.textContent;
