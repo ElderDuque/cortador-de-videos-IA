@@ -448,6 +448,8 @@
     </div>
 
     <textarea id="transcript" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" placeholder="Ou cole aqui a transcrição com timestamps, ex:&#10;[00:00] E aí pessoal, hoje eu vou falar sobre...&#10;[00:15] Isso mudou completamente minha forma de pensar...&#10;[00:40] ..."></textarea>
+    <input type="file" id="transcriptFileInput" accept=".txt" style="display:none;" onchange="loadTranscriptFromFile(this)">
+    <button class="helper-btn" onclick="document.getElementById('transcriptFileInput').click()">carregar transcrição de um arquivo .txt (evita travar ao colar)</button>
     <button class="helper-btn" onclick="loadSample()">usar exemplo de teste</button>
     <button class="helper-btn" onclick="saveCurrentToLibrary()" style="border-top:none; padding-top:8px;">salvar essa transcrição na biblioteca</button>
   </div>
@@ -871,6 +873,21 @@ async function fetchYoutubeTranscript() {
     btn.disabled = false;
     setTimeout(() => { btn.textContent = originalText; }, 3000);
   }
+}
+
+function loadTranscriptFromFile(input) {
+  const file = input.files && input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    document.getElementById('transcript').value = e.target.result;
+    input.value = '';
+  };
+  reader.onerror = () => {
+    alert('Não consegui ler esse arquivo. Confirma que é um .txt.');
+    input.value = '';
+  };
+  reader.readAsText(file, 'UTF-8');
 }
 
 function loadSample() {
