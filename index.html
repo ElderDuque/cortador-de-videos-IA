@@ -447,7 +447,7 @@
       <button type="button" class="helper-btn" onclick="copyVideoTitle()" style="border-top:none; padding-top:6px;">copiar título</button>
     </div>
 
-    <textarea id="transcript" placeholder="Ou cole aqui a transcrição com timestamps, ex:&#10;[00:00] E aí pessoal, hoje eu vou falar sobre...&#10;[00:15] Isso mudou completamente minha forma de pensar...&#10;[00:40] ..."></textarea>
+    <textarea id="transcript" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" placeholder="Ou cole aqui a transcrição com timestamps, ex:&#10;[00:00] E aí pessoal, hoje eu vou falar sobre...&#10;[00:15] Isso mudou completamente minha forma de pensar...&#10;[00:40] ..."></textarea>
     <button class="helper-btn" onclick="loadSample()">usar exemplo de teste</button>
     <button class="helper-btn" onclick="saveCurrentToLibrary()" style="border-top:none; padding-top:8px;">salvar essa transcrição na biblioteca</button>
   </div>
@@ -498,7 +498,7 @@
     <div class="note" style="border-top:none; margin-top:14px; padding-top:0; text-align:center;">— ou —</div>
 
     <label class="field-label" style="margin-top:14px;">Procurando um trecho específico? Descreve o tema/título, ou cola um pedaço da fala que você lembra:</label>
-    <textarea id="titleSearch" placeholder="Ex: 'quando ele fala sobre perdão' — ou cola um trecho aproximado tipo 'algo sobre não guardar mágoa do próximo'" style="min-height: 80px; margin-bottom: 8px;"></textarea>
+    <textarea id="titleSearch" spellcheck="false" autocomplete="off" autocorrect="off" autocapitalize="off" placeholder="Ex: 'quando ele fala sobre perdão' — ou cola um trecho aproximado tipo 'algo sobre não guardar mágoa do próximo'" style="min-height: 80px; margin-bottom: 8px;"></textarea>
 
     <label class="field-label">Ou manda um print de uma sugestão que você viu em outro app:</label>
     <input type="file" id="screenshotFile" accept="image/*" onchange="loadScreenshot(event)" style="position:absolute; width:1px; height:1px; opacity:0; overflow:hidden;">
@@ -1121,7 +1121,6 @@ function renderClips(clips, historyIndex) {
 refreshLibraryUI();
 </script>
 
-</body>
 <script>
 function timeToSeconds(t) {
   const parts = t.split(':').map(Number);
@@ -1247,4 +1246,6 @@ if ('serviceWorker' in navigator) {
   });
 }
 </script>
+
+</body>
 </html>
