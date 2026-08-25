@@ -1256,20 +1256,40 @@ window.transcribeVideoRange = async function () {
       const base64 = await arrayBufferToBase64(audioBuffer);
 
       try {
-        const response = await fetch("https://chipper-entremet-a2e69d.netlify.app/.netlify/functions/transcribeAudio", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ audioBase64: base64, mimeType: mimeType.split(';')[0] })
-        });
+        let lastErr = null;
+        let data = null;
+        const MAX_TRIES = 3;
 
-        const raw = await response.text();
-        let data;
-        try { data = JSON.parse(raw); } catch (e) {
-          throw new Error(`Resposta inesperada do servidor (status ${response.status})`);
+        for (let attempt = 1; attempt <= MAX_TRIES; attempt++) {
+          try {
+            if (attempt > 1) {
+              btn.textContent = `Parte ${chunkIndex + 1}/${numChunks} — tentativa ${attempt}/${MAX_TRIES}...`;
+              await new Promise(r => setTimeout(r, attempt * 2000)); // espera 2s, depois 4s antes de tentar de novo
+            }
+
+            const response = await fetch("https://chipper-entremet-a2e69d.netlify.app/.netlify/functions/transcribeAudio", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ audioBase64: base64, mimeType: mimeType.split(';')[0] })
+            });
+
+            const raw = await response.text();
+            try { data = JSON.parse(raw); } catch (e) {
+              throw new Error(`Resposta inesperada do servidor (status ${response.status})`);
+            }
+            if (!response.ok || data.error) {
+              throw new Error(data.error ? JSON.stringify(data.error).slice(0, 200) : `Erro ${response.status}`);
+            }
+
+            lastErr = null;
+            break; // deu certo, sai do loop de tentativas
+          } catch (attemptErr) {
+            lastErr = attemptErr;
+            data = null;
+          }
         }
-        if (!response.ok || data.error) {
-          throw new Error(data.error ? JSON.stringify(data.error).slice(0, 200) : `Erro ${response.status}`);
-        }
+
+        if (lastErr) throw lastErr;
 
         const textBlock = data.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!textBlock) throw new Error('A IA não retornou texto nessa parte.');
@@ -1287,7 +1307,7 @@ window.transcribeVideoRange = async function () {
         textarea.value = accumulatedLines.join('\n');
         saveToLibrary(fileKey, fileTitle, accumulatedLines.join('\n'), chunkEndSec);
       } catch (chunkErr) {
-        throw new Error(`Falhou na parte ${chunkIndex + 1} de ${numChunks} (as partes anteriores já estão salvas na caixa de texto e na biblioteca): ${chunkErr.message}`);
+        throw new Error(`Falhou na parte ${chunkIndex + 1} de ${numChunks} mesmo depois de tentar de novo (as partes anteriores já estão salvas na caixa de texto e na biblioteca): ${chunkErr.message}`);
       }
     }
 
