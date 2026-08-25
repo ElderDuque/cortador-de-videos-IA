@@ -434,7 +434,7 @@
     </div>
 
     <button type="button" class="primary" id="autoTranscribeBtn" onclick="transcribeVideoRange()" style="margin-bottom: 6px;">Transcrever vídeo automaticamente (usa o vídeo da etapa 1)</button>
-    <div class="note" style="border-top:none; margin-top:0; padding-top:0; margin-bottom: 16px;">Grava em tempo real — um vídeo de 10min leva ~10min. Envia em partes de 8 em 8 minutos, e cada parte já fica salva assim que termina (se algo falhar no meio, você não perde o que já foi feito). Deixa a tela ligada até terminar.</div>
+    <div class="note" style="border-top:none; margin-top:0; padding-top:0; margin-bottom: 16px;">Grava em tempo real — um vídeo de 10min leva ~10min. Envia em partes de 5 em 5 minutos, e cada parte já fica salva assim que termina (se algo falhar no meio, você não perde o que já foi feito). Deixa a tela ligada até terminar.</div>
 
     <div class="note" style="border-top:none; margin-top:0; padding-top:0; text-align:center;">— ou —</div>
 
@@ -1191,7 +1191,7 @@ window.transcribeVideoRange = async function () {
     }
   }
 
-  const CHUNK_SEC = 480; // 8 minutos por envio, pra nunca estourar o limite do servidor
+  const CHUNK_SEC = 300; // 5 minutos por envio, com qualidade de áudio reduzida, pra garantir que nunca estoura o limite do servidor
   const totalDuration = endSec - effectiveStartSec;
   const numChunks = Math.max(1, Math.ceil(totalDuration / CHUNK_SEC));
 
@@ -1227,7 +1227,7 @@ window.transcribeVideoRange = async function () {
       const chunkStartSec = effectiveStartSec + chunkIndex * CHUNK_SEC;
       const chunkEndSec = Math.min(endSec, chunkStartSec + CHUNK_SEC);
 
-      const recorder = new MediaRecorder(audioOnlyStream, { mimeType });
+      const recorder = new MediaRecorder(audioOnlyStream, { mimeType, audioBitsPerSecond: 32000 });
       const chunkBlobs = [];
       recorder.ondataavailable = (e) => { if (e.data.size > 0) chunkBlobs.push(e.data); };
       const recordingDone = new Promise((resolve) => { recorder.onstop = resolve; });
