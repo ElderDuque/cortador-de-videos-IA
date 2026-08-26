@@ -454,6 +454,10 @@
 
     <textarea id="transcript" placeholder="Ou cole aqui a transcrição com timestamps, ex:&#10;[00:00] E aí pessoal, hoje eu vou falar sobre...&#10;[00:15] Isso mudou completamente minha forma de pensar...&#10;[00:40] ..."></textarea>
     <button class="helper-btn" onclick="loadSample()">usar exemplo de teste</button>
+
+    <input type="file" id="transcriptFile" accept=".txt,text/plain" onchange="loadTranscriptFile(event)" style="position:absolute; width:1px; height:1px; opacity:0; overflow:hidden;">
+    <label for="transcriptFile" class="helper-btn" style="display:inline-block; border-top:none; padding-top:8px; cursor:pointer;">carregar transcrição de um arquivo .txt (evita travar ao colar)</label>
+
     <button class="helper-btn" onclick="saveCurrentToLibrary()" style="border-top:none; padding-top:8px;">salvar essa transcrição na biblioteca</button>
     <button class="helper-btn" onclick="downloadTranscript()" style="border-top:none; padding-top:8px;">baixar transcrição (.txt)</button>
   </div>
@@ -790,6 +794,39 @@ function loadFromLibrary() {
     document.getElementById('videoTitleInput').value = item.title;
     document.getElementById('videoTitleBox').style.display = 'block';
   }
+}
+
+function loadTranscriptFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    document.getElementById('transcript').value = reader.result;
+  };
+  reader.onerror = () => {
+    alert('Não consegui ler esse arquivo. Confirma que é um .txt.');
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
+function downloadTranscript() {
+  const transcript = document.getElementById('transcript').value.trim();
+  if (!transcript) {
+    alert('Não tem transcrição pra baixar ainda.');
+    return;
+  }
+
+  const blob = new Blob([transcript], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const suggestedName = (window.currentYoutubeTitle || 'transcricao').replace(/[^\w\s-]/g, '').slice(0, 60);
+  a.download = suggestedName + '.txt';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 function saveCurrentToLibrary() {
