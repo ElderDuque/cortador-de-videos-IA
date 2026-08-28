@@ -434,7 +434,7 @@
     </div>
 
     <button type="button" class="primary" id="autoTranscribeBtn" onclick="transcribeVideoRange()" style="margin-bottom: 6px;">Transcrever vídeo automaticamente (usa o vídeo da etapa 1)</button>
-    <div class="note" style="border-top:none; margin-top:0; padding-top:0; margin-bottom: 16px;">Grava em tempo real — um vídeo de 10min leva ~10min. Envia em partes de 5 em 5 minutos, e cada parte já fica salva assim que termina (se algo falhar no meio, você não perde o que já foi feito). Deixa a tela ligada até terminar.</div>
+    <div class="note" style="border-top:none; margin-top:0; padding-top:0; margin-bottom: 16px;">Grava em tempo real — um vídeo de 10min leva ~10min. Envia em partes de 5 em 5 minutos, e cada parte já fica salva assim que termina (se algo falhar no meio, você não perde o que já foi feito). Se a caixa de transcrição já tiver algo (ex: só faltou uma parte), usa "A partir de" na etapa 3 pra completar só o que falta, sem apagar o resto. Deixa a tela ligada até terminar.</div>
 
     <div class="note" style="border-top:none; margin-top:0; padding-top:0; text-align:center;">— ou —</div>
 
@@ -1262,6 +1262,7 @@ window.transcribeVideoRange = async function () {
 
   let effectiveStartSec = startSec;
   let accumulatedLines = [];
+  let seededFromExisting = false;
 
   const existing = getFromLibrary(fileKey);
   if (existing && typeof existing.lastEndSec === 'number') {
@@ -1272,11 +1273,21 @@ window.transcribeVideoRange = async function () {
       window.currentYoutubeVideoId = fileKey;
       btn.textContent = '✓ Já tinha esse trecho transcrito — carregado da biblioteca';
       setTimeout(() => { btn.textContent = 'Transcrever vídeo automaticamente (usa o vídeo da etapa 1)'; }, 4000);
+      updateTranscriptCoverage();
       return;
     }
     if (existing.lastEndSec > startSec) {
       effectiveStartSec = existing.lastEndSec;
       accumulatedLines = existing.transcript.split('\n');
+      seededFromExisting = true;
+    }
+  }
+
+  if (!seededFromExisting) {
+    const currentText = textarea.value.trim();
+    if (currentText) {
+      // já tinha algo na caixa (colado, carregado de arquivo, etc) — completa a partir dali em vez de apagar
+      accumulatedLines = currentText.split('\n');
     }
   }
 
