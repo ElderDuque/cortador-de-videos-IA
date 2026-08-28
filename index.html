@@ -452,7 +452,8 @@
       <button type="button" class="helper-btn" onclick="copyVideoTitle()" style="border-top:none; padding-top:6px;">copiar título</button>
     </div>
 
-    <textarea id="transcript" placeholder="Ou cole aqui a transcrição com timestamps, ex:&#10;[00:00] E aí pessoal, hoje eu vou falar sobre...&#10;[00:15] Isso mudou completamente minha forma de pensar...&#10;[00:40] ..."></textarea>
+    <textarea id="transcript" placeholder="Ou cole aqui a transcrição com timestamps, ex:&#10;[00:00] E aí pessoal, hoje eu vou falar sobre...&#10;[00:15] Isso mudou completamente minha forma de pensar...&#10;[00:40] ..." onchange="updateTranscriptCoverage()"></textarea>
+    <div id="coverageBox" class="note" style="border-top:none; margin-top:8px; padding-top:0; display:none;"></div>
     <button class="helper-btn" onclick="loadSample()">usar exemplo de teste</button>
 
     <input type="file" id="transcriptFile" accept=".txt,text/plain" onchange="loadTranscriptFile(event)" style="position:absolute; width:1px; height:1px; opacity:0; overflow:hidden;">
@@ -712,6 +713,7 @@ function loadVideo(event) {
     video.style.display = 'block';
     fileName.textContent = '✓ ' + file.name;
     fileName.style.display = 'block';
+    video.addEventListener('loadedmetadata', updateTranscriptCoverage, { once: true });
   } catch (err) {
     fileName.textContent = 'Não consegui carregar esse arquivo. Tenta outro formato de vídeo.';
     fileName.style.display = 'block';
@@ -794,6 +796,7 @@ function loadFromLibrary() {
     document.getElementById('videoTitleInput').value = item.title;
     document.getElementById('videoTitleBox').style.display = 'block';
   }
+  updateTranscriptCoverage();
 }
 
 function loadTranscriptFile(event) {
@@ -803,6 +806,7 @@ function loadTranscriptFile(event) {
   const reader = new FileReader();
   reader.onload = () => {
     document.getElementById('transcript').value = reader.result;
+    updateTranscriptCoverage();
   };
   reader.onerror = () => {
     alert('Não consegui ler esse arquivo. Confirma que é um .txt.');
@@ -873,6 +877,7 @@ async function fetchYoutubeTranscript() {
       document.getElementById('videoTitleBox').style.display = 'block';
       btn.textContent = '✓ Carregado da biblioteca (já tinha salvo)';
       setTimeout(() => { btn.textContent = originalText; }, 3000);
+      updateTranscriptCoverage();
       return;
     }
   }
@@ -913,6 +918,7 @@ async function fetchYoutubeTranscript() {
     }
 
     btn.textContent = '✓ Transcrição carregada';
+    updateTranscriptCoverage();
   } catch (err) {
     alert('Não consegui buscar a transcrição: ' + err.message + '\n\nVocê ainda pode colar a transcrição manualmente abaixo.');
     btn.textContent = originalText;
@@ -936,6 +942,52 @@ function loadSample() {
 [02:25] Terceira, e essa é a mais importante: revise toda semana, não só no fim do mês.
 [02:45] Se você fizer só isso, eu garanto que em 30 dias sua relação com dinheiro vai ser outra.
 [03:00] Obrigado por assistir até aqui, deixa nos comentários se você já passou por algo parecido.`;
+  updateTranscriptCoverage();
+}
+
+function updateTranscriptCoverage() {
+  const box = document.getElementById('coverageBox');
+  const transcript = document.getElementById('transcript').value;
+
+  const lines = transcript.split('\n');
+  let minSec = null;
+  let maxSec = null;
+
+  lines.forEach(line => {
+    const m = line.match(/^\[(\d{1,2}):(\d{2})(?::(\d{2}))?\]/);
+    if (!m) return;
+    const sec = m[3]
+      ? parseInt(m[1]) * 3600 + parseInt(m[2]) * 60 + parseInt(m[3])
+      : parseInt(m[1]) * 60 + parseInt(m[2]);
+    if (minSec === null || sec < minSec) minSec = sec;
+    if (maxSec === null || sec > maxSec) maxSec = sec;
+  });
+
+  if (minSec === null) {
+    box.style.display = 'none';
+    return;
+  }
+
+  const video = document.getElementById('videoPreview');
+  const videoDuration = (video && video.style.display !== 'none' && video.duration && !isNaN(video.duration)) ? video.duration : null;
+
+  let html = `Transcrição cobre de ${secToTimestamp(minSec)} até ${secToTimestamp(maxSec)}`;
+
+  if (videoDuration) {
+    html += ` &nbsp;·&nbsp; vídeo tem ${secToTimestamp(Math.round(videoDuration))} de duração`;
+    const gap = videoDuration - maxSec;
+    if (gap > videoDuration * 0.1 && gap > 30) {
+      html = `⚠️ ` + html + `<br>Parece que falta cobrir os últimos ${secToTimestamp(Math.round(gap))} do vídeo — a transcrição pode estar incompleta.`;
+      box.style.color = 'var(--accent)';
+    } else {
+      box.style.color = 'var(--ok)';
+    }
+  } else {
+    box.style.color = 'var(--text-dim)';
+  }
+
+  box.innerHTML = html;
+  box.style.display = 'block';
 }
 
 function parseFlexibleTime(t) {
@@ -1343,6 +1395,7 @@ window.transcribeVideoRange = async function () {
         // salva progressivamente — se uma parte seguinte falhar, isso aqui não se perde
         textarea.value = accumulatedLines.join('\n');
         saveToLibrary(fileKey, fileTitle, accumulatedLines.join('\n'), chunkEndSec);
+        updateTranscriptCoverage();
       } catch (chunkErr) {
         throw new Error(`Falhou na parte ${chunkIndex + 1} de ${numChunks} mesmo depois de tentar de novo (as partes anteriores já estão salvas na caixa de texto e na biblioteca): ${chunkErr.message}`);
       }
