@@ -434,6 +434,7 @@
     </div>
 
     <button type="button" class="primary" id="autoTranscribeBtn" onclick="transcribeVideoRange()" style="margin-bottom: 6px;">Transcrever vídeo automaticamente (usa o vídeo da etapa 1)</button>
+    <button type="button" id="stopTranscribeBtn" onclick="stopTranscribing()" style="display:none; width:100%; background: transparent; color: var(--accent); border: 1px solid var(--accent-dim); border-radius: 8px; padding: 10px; font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 13px; cursor: pointer; margin-bottom: 6px;">⏹ Parar (mantém o que já foi salvo)</button>
     <div class="note" style="border-top:none; margin-top:0; padding-top:0; margin-bottom: 16px;">Grava em tempo real — um vídeo de 10min leva ~10min. Envia em partes de 5 em 5 minutos, e cada parte já fica salva assim que termina (se algo falhar no meio, você não perde o que já foi feito). Se a caixa de transcrição já tiver algo (ex: só faltou uma parte), usa "A partir de" na etapa 3 pra completar só o que falta, sem apagar o resto. Deixa a tela ligada até terminar.</div>
 
     <div class="note" style="border-top:none; margin-top:0; padding-top:0; text-align:center;">— ou —</div>
@@ -1233,9 +1234,17 @@ async function arrayBufferToBase64(buffer) {
   });
 }
 
+function stopTranscribing() {
+  window.transcribeCancelled = true;
+  const stopBtn = document.getElementById('stopTranscribeBtn');
+  stopBtn.textContent = 'Parando (aguarda terminar a parte atual)...';
+  stopBtn.disabled = true;
+}
+
 window.transcribeVideoRange = async function () {
   const videoEl = document.getElementById('videoPreview');
   const btn = document.getElementById('autoTranscribeBtn');
+  const stopBtn = document.getElementById('stopTranscribeBtn');
   const textarea = document.getElementById('transcript');
 
   if (!window.currentVideoFile) {
@@ -1247,6 +1256,11 @@ window.transcribeVideoRange = async function () {
     return;
   }
 
+  window.transcribeCancelled = false;
+  stopBtn.style.display = 'block';
+  stopBtn.disabled = false;
+  stopBtn.textContent = '⏹ Parar (mantém o que já foi salvo)';
+
   const rangeStartText = document.getElementById('rangeStart').value.trim();
   const rangeEndText = document.getElementById('rangeEnd').value.trim();
   const startSec = rangeStartText ? timeToSeconds(rangeStartText) : 0;
@@ -1254,6 +1268,7 @@ window.transcribeVideoRange = async function () {
 
   if (endSec <= startSec) {
     alert('Confere os campos "A partir de / Até" na etapa 3 — o fim precisa ser depois do início.');
+    stopBtn.style.display = 'none';
     return;
   }
 
@@ -1261,34 +1276,33 @@ window.transcribeVideoRange = async function () {
   const fileTitle = window.currentVideoFile.name;
 
   let effectiveStartSec = startSec;
-  let accumulatedLines = [];
-  let seededFromExisting = false;
+
+  // regra simples e segura: o que está VISÍVEL na caixa agora nunca é apagado.
+  // só usa a biblioteca se a caixa estiver vazia (ex: acabou de reabrir o app).
+  const currentText = textarea.value.trim();
+  let accumulatedLines = currentText ? currentText.split('\n') : [];
 
   const existing = getFromLibrary(fileKey);
-  if (existing && typeof existing.lastEndSec === 'number') {
-    if (existing.lastEndSec >= endSec) {
-      // já tem tudo que foi pedido — só carrega, sem gravar de novo
-      document.getElementById('transcript').value = existing.transcript;
-      window.currentYoutubeTitle = fileTitle;
-      window.currentYoutubeVideoId = fileKey;
-      btn.textContent = '✓ Já tinha esse trecho transcrito — carregado da biblioteca';
-      setTimeout(() => { btn.textContent = 'Transcrever vídeo automaticamente (usa o vídeo da etapa 1)'; }, 4000);
-      updateTranscriptCoverage();
-      return;
-    }
-    if (existing.lastEndSec > startSec) {
-      effectiveStartSec = existing.lastEndSec;
-      accumulatedLines = existing.transcript.split('\n');
-      seededFromExisting = true;
-    }
+
+  if (!currentText && existing && existing.transcript) {
+    // caixa vazia — carrega o que tinha salvo, pra não perder o progresso anterior
+    accumulatedLines = existing.transcript.split('\n');
   }
 
-  if (!seededFromExisting) {
-    const currentText = textarea.value.trim();
-    if (currentText) {
-      // já tinha algo na caixa (colado, carregado de arquivo, etc) — completa a partir dali em vez de apagar
-      accumulatedLines = currentText.split('\n');
-    }
+  if (existing && typeof existing.lastEndSec === 'number' && existing.lastEndSec > effectiveStartSec) {
+    // já tem progresso salvo mais adiantado que o pedido — evita regravar o que já foi feito
+    effectiveStartSec = existing.lastEndSec;
+  }
+
+  if (effectiveStartSec >= endSec) {
+    // já cobre tudo que foi pedido — não precisa gravar nada
+    textarea.value = accumulatedLines.join('\n');
+    window.currentYoutubeTitle = fileTitle;
+    window.currentYoutubeVideoId = fileKey;
+    btn.textContent = '✓ Já tinha esse trecho — nada novo pra gravar';
+    setTimeout(() => { btn.textContent = 'Transcrever vídeo automaticamente (usa o vídeo da etapa 1)'; }, 4000);
+    updateTranscriptCoverage();
+    return;
   }
 
   const CHUNK_SEC = 300; // 5 minutos por envio, com qualidade de áudio reduzida, pra garantir que nunca estoura o limite do servidor
@@ -1324,6 +1338,11 @@ window.transcribeVideoRange = async function () {
     await videoEl.play();
 
     for (let chunkIndex = 0; chunkIndex < numChunks; chunkIndex++) {
+      if (window.transcribeCancelled) {
+        videoEl.pause();
+        break;
+      }
+
       const chunkStartSec = effectiveStartSec + chunkIndex * CHUNK_SEC;
       const chunkEndSec = Math.min(endSec, chunkStartSec + CHUNK_SEC);
 
@@ -1335,8 +1354,17 @@ window.transcribeVideoRange = async function () {
       await videoEl.play();
       recorder.start();
 
+      let cancelledMidChunk = false;
       await new Promise((resolve) => {
         const checkInterval = setInterval(() => {
+          if (window.transcribeCancelled) {
+            cancelledMidChunk = true;
+            clearInterval(checkInterval);
+            videoEl.pause();
+            recorder.stop();
+            resolve();
+            return;
+          }
           const chunkPct = Math.round(((videoEl.currentTime - chunkStartSec) / (chunkEndSec - chunkStartSec)) * 100);
           btn.textContent = `Parte ${chunkIndex + 1}/${numChunks} — gravando ${Math.min(100, Math.max(0, chunkPct))}%`;
           if (videoEl.currentTime >= chunkEndSec || videoEl.ended) {
@@ -1349,6 +1377,11 @@ window.transcribeVideoRange = async function () {
       });
 
       await recordingDone;
+
+      if (cancelledMidChunk) {
+        // parte cancelada no meio — não envia parte incompleta, mantém só o que já tinha sido salvo antes
+        break;
+      }
 
       btn.textContent = `Parte ${chunkIndex + 1}/${numChunks} — enviando...`;
       const blob = new Blob(chunkBlobs, { type: mimeType });
@@ -1415,7 +1448,9 @@ window.transcribeVideoRange = async function () {
     videoEl.pause();
     window.currentYoutubeTitle = fileTitle;
     window.currentYoutubeVideoId = fileKey;
-    btn.textContent = '✓ Transcrição completa e salva na biblioteca';
+    btn.textContent = window.transcribeCancelled
+      ? '⏹ Parado — o que já foi feito está salvo'
+      : '✓ Transcrição completa e salva na biblioteca';
   } catch (err) {
     console.error(err);
     alert('Erro ao transcrever: ' + err.message);
@@ -1423,6 +1458,7 @@ window.transcribeVideoRange = async function () {
     videoEl.pause();
   } finally {
     btn.disabled = false;
+    stopBtn.style.display = 'none';
     setTimeout(() => { btn.textContent = originalText; }, 5000);
   }
 };
