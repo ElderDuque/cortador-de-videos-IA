@@ -433,20 +433,9 @@
       <button type="button" class="helper-btn" onclick="loadFromLibrary()" style="border-top:none; padding-top:0;">carregar transcrição salva</button>
     </div>
 
-    <label class="field-label">Velocidade da gravação:</label>
-    <div class="row" style="margin-bottom: 10px;">
-      <select id="transcribeSpeed">
-        <option value="1">1x (mais preciso, mais lento)</option>
-        <option value="1.5">1.5x</option>
-        <option value="2" selected>2x (equilíbrio bom)</option>
-        <option value="3">3x (rápido, pode perder detalhe)</option>
-        <option value="4">4x (bem rápido, mais risco de erro)</option>
-      </select>
-    </div>
-
     <button type="button" class="primary" id="autoTranscribeBtn" onclick="transcribeVideoRange()" style="margin-bottom: 6px;">Transcrever vídeo automaticamente (usa o vídeo da etapa 1)</button>
     <button type="button" id="stopTranscribeBtn" onclick="stopTranscribing()" style="display:none; width:100%; background: transparent; color: var(--accent); border: 1px solid var(--accent-dim); border-radius: 8px; padding: 10px; font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 13px; cursor: pointer; margin-bottom: 6px;">⏹ Parar (mantém o que já foi salvo)</button>
-    <div class="note" style="border-top:none; margin-top:0; padding-top:0; margin-bottom: 16px;">Grava mais rápido que tempo real com a velocidade acima (padrão 2x = metade do tempo). Envia em partes de 5 em 5 minutos (de conteúdo do vídeo), e cada parte já fica salva assim que termina (se algo falhar no meio, você não perde o que já foi feito). Se a caixa de transcrição já tiver algo (ex: só faltou uma parte), usa "A partir de" na etapa 3 pra completar só o que falta, sem apagar o resto. Deixa a tela ligada até terminar.</div>
+    <div class="note" style="border-top:none; margin-top:0; padding-top:0; margin-bottom: 16px;">Grava em tempo real — um vídeo de 10min leva ~10min. Envia em partes de 5 em 5 minutos, e cada parte já fica salva assim que termina (se algo falhar no meio, você não perde o que já foi feito). Se a caixa de transcrição já tiver algo (ex: só faltou uma parte), usa "A partir de" na etapa 3 pra completar só o que falta, sem apagar o resto. Deixa a tela ligada até terminar.</div>
 
     <div class="note" style="border-top:none; margin-top:0; padding-top:0; text-align:center;">— ou —</div>
 
@@ -725,7 +714,13 @@ function loadVideo(event) {
     video.style.display = 'block';
     fileName.textContent = '✓ ' + file.name;
     fileName.style.display = 'block';
-    video.addEventListener('loadedmetadata', updateTranscriptCoverage, { once: true });
+    video.addEventListener('loadedmetadata', () => {
+      updateTranscriptCoverage();
+      const match = findLibraryEntryForVideo(file, video.duration);
+      if (match && typeof match.lastEndSec === 'number' && match.lastEndSec > 0) {
+        fileName.textContent = `✓ ${file.name} — progresso salvo encontrado (retoma de ${secToTimestamp(match.lastEndSec)})`;
+      }
+    }, { once: true });
   } catch (err) {
     fileName.textContent = 'Não consegui carregar esse arquivo. Tenta outro formato de vídeo.';
     fileName.style.display = 'block';
@@ -754,7 +749,7 @@ function saveLibrary(library) {
   localStorage.setItem('cortadorLibrary', JSON.stringify(library.slice(0, 30)));
 }
 
-function saveToLibrary(key, title, transcript, lastEndSec) {
+function saveToLibrary(key, title, transcript, lastEndSec, duration) {
   if (!transcript) return;
   const library = getLibrary();
   const existingIdx = library.findIndex(item => item.key === key);
@@ -763,7 +758,8 @@ function saveToLibrary(key, title, transcript, lastEndSec) {
     title: title || key,
     transcript,
     date: new Date().toLocaleString('pt-BR'),
-    lastEndSec: lastEndSec !== undefined ? lastEndSec : (library[existingIdx]?.lastEndSec)
+    lastEndSec: lastEndSec !== undefined ? lastEndSec : (library[existingIdx]?.lastEndSec),
+    duration: duration !== undefined ? duration : (library[existingIdx]?.duration)
   };
 
   if (existingIdx >= 0) {
@@ -777,6 +773,36 @@ function saveToLibrary(key, title, transcript, lastEndSec) {
 
 function getFromLibrary(key) {
   return getLibrary().find(item => item.key === key) || null;
+}
+
+// Acha o progresso salvo de um vídeo local mesmo que o arquivo tenha sido
+// reselecionado com nome/tamanho levemente diferentes (comum no celular,
+// quando a galeria/app de arquivos entrega uma "cópia" do vídeo original).
+// Primeiro tenta a chave exata; se não achar, tenta casar por título igual
+// ou duração muito parecida (diferença menor que 1.5s) e realinha a chave
+// pra essa nova referência, sem perder o que já estava salvo.
+function findLibraryEntryForVideo(file, duration) {
+  if (!file) return null;
+  const library = getLibrary();
+  const exactKey = 'local_' + file.name + '_' + file.size;
+
+  let entry = library.find(item => item.key === exactKey);
+  if (entry) return entry;
+
+  entry = library.find(item =>
+    item.key.startsWith('local_') &&
+    (
+      item.title === file.name ||
+      (typeof item.duration === 'number' && typeof duration === 'number' && Math.abs(item.duration - duration) < 1.5)
+    )
+  );
+
+  if (entry && entry.key !== exactKey) {
+    entry.key = exactKey;
+    saveLibrary(library);
+  }
+
+  return entry || null;
 }
 
 function refreshLibraryUI() {
@@ -1272,8 +1298,6 @@ window.transcribeVideoRange = async function () {
   stopBtn.disabled = false;
   stopBtn.textContent = '⏹ Parar (mantém o que já foi salvo)';
 
-  const playbackRate = parseFloat(document.getElementById('transcribeSpeed').value) || 1;
-
   const rangeStartText = document.getElementById('rangeStart').value.trim();
   const rangeEndText = document.getElementById('rangeEnd').value.trim();
   const startSec = rangeStartText ? timeToSeconds(rangeStartText) : 0;
@@ -1295,7 +1319,7 @@ window.transcribeVideoRange = async function () {
   const currentText = textarea.value.trim();
   let accumulatedLines = currentText ? currentText.split('\n') : [];
 
-  const existing = getFromLibrary(fileKey);
+  const existing = findLibraryEntryForVideo(window.currentVideoFile, videoEl.duration);
 
   if (!currentText && existing && existing.transcript) {
     // caixa vazia — carrega o que tinha salvo, pra não perder o progresso anterior
@@ -1348,7 +1372,6 @@ window.transcribeVideoRange = async function () {
     const audioOnlyStream = new MediaStream(audioTracks);
 
     videoEl.muted = false;
-    videoEl.playbackRate = playbackRate;
     await videoEl.play();
 
     for (let chunkIndex = 0; chunkIndex < numChunks; chunkIndex++) {
@@ -1452,7 +1475,7 @@ window.transcribeVideoRange = async function () {
 
         // salva progressivamente — se uma parte seguinte falhar, isso aqui não se perde
         textarea.value = accumulatedLines.join('\n');
-        saveToLibrary(fileKey, fileTitle, accumulatedLines.join('\n'), chunkEndSec);
+        saveToLibrary(fileKey, fileTitle, accumulatedLines.join('\n'), chunkEndSec, videoEl.duration);
         updateTranscriptCoverage();
       } catch (chunkErr) {
         throw new Error(`Falhou na parte ${chunkIndex + 1} de ${numChunks} mesmo depois de tentar de novo (as partes anteriores já estão salvas na caixa de texto e na biblioteca): ${chunkErr.message}`);
@@ -1471,7 +1494,6 @@ window.transcribeVideoRange = async function () {
     btn.textContent = 'Parou — mas o que já foi feito está salvo';
     videoEl.pause();
   } finally {
-    videoEl.playbackRate = 1;
     btn.disabled = false;
     stopBtn.style.display = 'none';
     setTimeout(() => { btn.textContent = originalText; }, 5000);
