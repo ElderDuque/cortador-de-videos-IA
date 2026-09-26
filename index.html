@@ -433,9 +433,20 @@
       <button type="button" class="helper-btn" onclick="loadFromLibrary()" style="border-top:none; padding-top:0;">carregar transcrição salva</button>
     </div>
 
+    <label class="field-label">Velocidade da gravação:</label>
+    <div class="row" style="margin-bottom: 10px;">
+      <select id="transcribeSpeed">
+        <option value="1">1x (mais preciso, mais lento)</option>
+        <option value="1.5">1.5x</option>
+        <option value="2" selected>2x (equilíbrio bom)</option>
+        <option value="3">3x (rápido, pode perder detalhe)</option>
+        <option value="4">4x (bem rápido, mais risco de erro)</option>
+      </select>
+    </div>
+
     <button type="button" class="primary" id="autoTranscribeBtn" onclick="transcribeVideoRange()" style="margin-bottom: 6px;">Transcrever vídeo automaticamente (usa o vídeo da etapa 1)</button>
     <button type="button" id="stopTranscribeBtn" onclick="stopTranscribing()" style="display:none; width:100%; background: transparent; color: var(--accent); border: 1px solid var(--accent-dim); border-radius: 8px; padding: 10px; font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 13px; cursor: pointer; margin-bottom: 6px;">⏹ Parar (mantém o que já foi salvo)</button>
-    <div class="note" style="border-top:none; margin-top:0; padding-top:0; margin-bottom: 16px;">Grava em tempo real — um vídeo de 10min leva ~10min. Envia em partes de 5 em 5 minutos, e cada parte já fica salva assim que termina (se algo falhar no meio, você não perde o que já foi feito). Se a caixa de transcrição já tiver algo (ex: só faltou uma parte), usa "A partir de" na etapa 3 pra completar só o que falta, sem apagar o resto. Deixa a tela ligada até terminar.</div>
+    <div class="note" style="border-top:none; margin-top:0; padding-top:0; margin-bottom: 16px;">Grava mais rápido que tempo real com a velocidade acima (padrão 2x = metade do tempo). Envia em partes de 5 em 5 minutos (de conteúdo do vídeo), e cada parte já fica salva assim que termina (se algo falhar no meio, você não perde o que já foi feito). Se a caixa de transcrição já tiver algo (ex: só faltou uma parte), usa "A partir de" na etapa 3 pra completar só o que falta, sem apagar o resto. Deixa a tela ligada até terminar.</div>
 
     <div class="note" style="border-top:none; margin-top:0; padding-top:0; text-align:center;">— ou —</div>
 
@@ -1261,6 +1272,8 @@ window.transcribeVideoRange = async function () {
   stopBtn.disabled = false;
   stopBtn.textContent = '⏹ Parar (mantém o que já foi salvo)';
 
+  const playbackRate = parseFloat(document.getElementById('transcribeSpeed').value) || 1;
+
   const rangeStartText = document.getElementById('rangeStart').value.trim();
   const rangeEndText = document.getElementById('rangeEnd').value.trim();
   const startSec = rangeStartText ? timeToSeconds(rangeStartText) : 0;
@@ -1335,6 +1348,7 @@ window.transcribeVideoRange = async function () {
     const audioOnlyStream = new MediaStream(audioTracks);
 
     videoEl.muted = false;
+    videoEl.playbackRate = playbackRate;
     await videoEl.play();
 
     for (let chunkIndex = 0; chunkIndex < numChunks; chunkIndex++) {
@@ -1457,6 +1471,7 @@ window.transcribeVideoRange = async function () {
     btn.textContent = 'Parou — mas o que já foi feito está salvo';
     videoEl.pause();
   } finally {
+    videoEl.playbackRate = 1;
     btn.disabled = false;
     stopBtn.style.display = 'none';
     setTimeout(() => { btn.textContent = originalText; }, 5000);
