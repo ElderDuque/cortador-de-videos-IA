@@ -394,6 +394,38 @@
     font-size: 11px;
     font-family: 'IBM Plex Mono', monospace;
   }
+  .pause-list {
+    max-height: 260px;
+    overflow-y: auto;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--panel-2);
+    margin-top: 8px;
+  }
+  .pause-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 9px 10px;
+    border-bottom: 1px dashed var(--line);
+    font-size: 12.5px;
+  }
+  .pause-item:last-child { border-bottom: none; }
+  .pause-item label { display: flex; align-items: center; gap: 8px; flex: 1; cursor: pointer; }
+  .pause-item input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); flex-shrink: 0; }
+  .pause-len { color: var(--text-dim); font-family: 'IBM Plex Mono', monospace; font-size: 11px; }
+  .pause-listen {
+    background: transparent;
+    border: 1px solid var(--line);
+    color: var(--accent);
+    border-radius: 6px;
+    padding: 6px 8px;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 11.5px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
 </style>
 </head>
 <body>
@@ -433,9 +465,20 @@
       <button type="button" class="helper-btn" onclick="loadFromLibrary()" style="border-top:none; padding-top:0;">carregar transcrição salva</button>
     </div>
 
+    <label class="field-label">Velocidade da gravação:</label>
+    <div class="row" style="margin-bottom: 10px;">
+      <select id="transcribeSpeed">
+        <option value="1">1x (mais preciso, mais lento)</option>
+        <option value="1.5">1.5x</option>
+        <option value="2" selected>2x (equilíbrio bom)</option>
+        <option value="3">3x (rápido, pode perder detalhe)</option>
+        <option value="4">4x (bem rápido, mais risco de erro)</option>
+      </select>
+    </div>
+
     <button type="button" class="primary" id="autoTranscribeBtn" onclick="transcribeVideoRange()" style="margin-bottom: 6px;">Transcrever vídeo automaticamente (usa o vídeo da etapa 1)</button>
     <button type="button" id="stopTranscribeBtn" onclick="stopTranscribing()" style="display:none; width:100%; background: transparent; color: var(--accent); border: 1px solid var(--accent-dim); border-radius: 8px; padding: 10px; font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 13px; cursor: pointer; margin-bottom: 6px;">⏹ Parar (mantém o que já foi salvo)</button>
-    <div class="note" style="border-top:none; margin-top:0; padding-top:0; margin-bottom: 16px;">Grava em tempo real — um vídeo de 10min leva ~10min. Envia em partes de 5 em 5 minutos, e cada parte já fica salva assim que termina (se algo falhar no meio, você não perde o que já foi feito). Se a caixa de transcrição já tiver algo (ex: só faltou uma parte), usa "A partir de" na etapa 3 pra completar só o que falta, sem apagar o resto. Deixa a tela ligada até terminar.</div>
+    <div class="note" style="border-top:none; margin-top:0; padding-top:0; margin-bottom: 16px;">Grava mais rápido que tempo real com a velocidade acima (padrão 2x = metade do tempo). Envia em partes de 5 em 5 minutos (de conteúdo do vídeo), e cada parte já fica salva assim que termina (se algo falhar no meio, você não perde o que já foi feito). Se a caixa de transcrição já tiver algo (ex: só faltou uma parte), usa "A partir de" na etapa 3 pra completar só o que falta, sem apagar o resto. Deixa a tela ligada até terminar.</div>
 
     <div class="note" style="border-top:none; margin-top:0; padding-top:0; text-align:center;">— ou —</div>
 
@@ -526,6 +569,75 @@
     <div class="note">A transcrição do vídeo é manual (cole o texto) ou via link do YouTube (busca a legenda automática). Colar o texto direto costuma ser o mais rápido pra vídeos próprios.<br><br>O corte agora grava o trecho em tempo real direto do navegador (sem custo, sem baixar nada pesado) — então baixar um corte de 1 minuto leva cerca de 1 minuto. O arquivo baixado é .webm (funciona bem pra reupload nas redes sociais).</div>
   </div>
 
+  </div>
+
+  <div class="step" id="pauseStep">
+    <div class="step-label"><span class="step-num">5</span>Cortar pausas do vídeo</div>
+    <div class="note" style="border-top:none; margin-top:0; padding-top:0; margin-bottom:12px;">Tira os silêncios longos do vídeo da etapa 1. Usa só o trecho de "A partir de / Até" (etapa 3), ou o vídeo todo se deixar vazio. Funciona melhor em trechos curtos (até uns 15 min) — teste primeiro com 2 ou 3 minutos.</div>
+
+    <div class="row" style="margin-bottom:10px;">
+      <div>
+        <label class="field-label">Pausas maiores que</label>
+        <select id="pauseMin" onchange="recomputePauses()">
+          <option value="0.6">0,6 s</option>
+          <option value="1" selected>1 s</option>
+          <option value="1.5">1,5 s</option>
+          <option value="2">2 s</option>
+        </select>
+      </div>
+      <div>
+        <label class="field-label">Viram pausas de</label>
+        <select id="pauseKeep" onchange="recomputePauses()">
+          <option value="0.3">0,3 s</option>
+          <option value="0.5" selected>0,5 s</option>
+          <option value="0.8">0,8 s</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row" style="margin-bottom:12px;">
+      <div>
+        <label class="field-label">Sensibilidade</label>
+        <select id="pauseSens" onchange="recomputePauses()">
+          <option value="0.15">Cortar menos</option>
+          <option value="0.25" selected>Normal</option>
+          <option value="0.4">Cortar mais</option>
+        </select>
+      </div>
+      <div>
+        <label class="field-label">Velocidade da análise</label>
+        <select id="pauseSpeed">
+          <option value="1">1x (mais preciso)</option>
+          <option value="2" selected>2x</option>
+          <option value="3">3x (mais rápido)</option>
+        </select>
+      </div>
+    </div>
+    <div class="note" style="border-top:none; margin-top:0; padding-top:0; margin-bottom:12px;">"Cortar mais" tira mais silêncio, mas pode pegar fala baixa. "Cortar menos" é mais seguro.</div>
+
+    <button type="button" class="primary" id="pauseAnalyzeBtn" onclick="analyzePauses()">1. Analisar pausas</button>
+    <button type="button" id="pauseStopBtn" onclick="stopPauseWork()" style="display:none; width:100%; background: transparent; color: var(--accent); border: 1px solid var(--accent-dim); border-radius: 8px; padding: 10px; font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 13px; cursor: pointer; margin-top: 8px;">⏹ Parar</button>
+    <div id="pauseStatus" class="note" style="border-top:none; margin-top:10px; padding-top:0;"></div>
+
+    <div id="pauseResults" style="display:none;">
+      <div id="pauseSummary" class="note" style="border-top:none; margin-top:0; padding-top:0; color: var(--text);"></div>
+      <div>
+        <button type="button" class="helper-btn" onclick="setAllPauses(true)" style="border-top:none; padding-top:6px;">marcar todas</button>
+        <button type="button" class="helper-btn" onclick="setAllPauses(false)" style="border-top:none; padding-top:6px; margin-left:12px;">desmarcar todas</button>
+      </div>
+      <div id="pauseList" class="pause-list"></div>
+      <div class="note" style="border-top:none; margin-top:8px; padding-top:0;">"▶ ouvir" toca 2s antes, pula a pausa e toca 2s depois, pra você conferir se o corte ficou natural. Desmarque as que quiser manter.</div>
+    </div>
+
+    <div id="pauseGenBox" style="display:none; margin-top:12px;">
+      <button type="button" class="primary" id="pauseGenBtn" onclick="generatePauseCutVideo()">2. Gerar vídeo sem as pausas</button>
+      <div class="note" style="border-top:none; margin-top:8px; padding-top:0;">Grava em tempo real, na velocidade normal, pulando as pausas marcadas. Deixa a tela ligada até terminar. O arquivo sai em .webm.</div>
+    </div>
+
+    <div id="pauseOutBox" style="display:none; margin-top:12px;">
+      <video id="pauseOutVideo" controls playsinline style="width:100%; border-radius:8px; background:#000;"></video>
+      <button type="button" class="primary" onclick="downloadPauseVideo()" style="margin-top:10px;">Baixar vídeo editado (.webm)</button>
+    </div>
   </div>
 
   <div id="viewHistory" style="display:none;">
@@ -1261,6 +1373,8 @@ window.transcribeVideoRange = async function () {
   stopBtn.disabled = false;
   stopBtn.textContent = '⏹ Parar (mantém o que já foi salvo)';
 
+  const playbackRate = parseFloat(document.getElementById('transcribeSpeed').value) || 1;
+
   const rangeStartText = document.getElementById('rangeStart').value.trim();
   const rangeEndText = document.getElementById('rangeEnd').value.trim();
   const startSec = rangeStartText ? timeToSeconds(rangeStartText) : 0;
@@ -1335,6 +1449,7 @@ window.transcribeVideoRange = async function () {
     const audioOnlyStream = new MediaStream(audioTracks);
 
     videoEl.muted = false;
+    videoEl.playbackRate = playbackRate;
     await videoEl.play();
 
     for (let chunkIndex = 0; chunkIndex < numChunks; chunkIndex++) {
@@ -1457,6 +1572,7 @@ window.transcribeVideoRange = async function () {
     btn.textContent = 'Parou — mas o que já foi feito está salvo';
     videoEl.pause();
   } finally {
+    videoEl.playbackRate = 1;
     btn.disabled = false;
     stopBtn.style.display = 'none';
     setTimeout(() => { btn.textContent = originalText; }, 5000);
@@ -1579,6 +1695,491 @@ window.cutClip = async function (title, idx) {
 };
 </script>
 
+
+<script>
+// ===== Manter a tela ligada durante processos longos =====
+let _wakeLock = null;
+async function keepScreenOn() {
+  try {
+    if ('wakeLock' in navigator) {
+      _wakeLock = await navigator.wakeLock.request('screen');
+    }
+  } catch (e) { console.warn('wakeLock:', e); }
+}
+function releaseScreenOn() {
+  try { if (_wakeLock) { _wakeLock.release(); _wakeLock = null; } } catch (e) {}
+}
+
+// ===== Cortar pausas =====
+window.pauseState = null;
+window.pauseCancel = false;
+
+function fmtTenths(t) {
+  t = Math.max(0, t);
+  const m = Math.floor(t / 60);
+  const s = t - m * 60;
+  return String(m).padStart(2, '0') + ':' + s.toFixed(1).padStart(4, '0');
+}
+
+function fitLine(points) {
+  const n = points.length;
+  let sx = 0, sy = 0, sxx = 0, sxy = 0;
+  for (const [x, y] of points) { sx += x; sy += y; sxx += x * x; sxy += x * y; }
+  const den = n * sxx - sx * sx;
+  const slope = den ? (n * sxy - sx * sy) / den : 0;
+  const icpt = (sy - slope * sx) / n;
+  return { slope, icpt };
+}
+
+function seekVideo(v, t) {
+  return new Promise((resolve) => {
+    if (Math.abs(v.currentTime - t) < 0.02) { resolve(); return; }
+    let done = false;
+    const fin = () => { if (done) return; done = true; v.removeEventListener('seeked', fin); resolve(); };
+    v.addEventListener('seeked', fin);
+    v.currentTime = t;
+    setTimeout(fin, 4000);
+  });
+}
+
+function getPauseRange(videoEl) {
+  const sTxt = document.getElementById('rangeStart').value.trim();
+  const eTxt = document.getElementById('rangeEnd').value.trim();
+  let startSec = sTxt ? timeToSeconds(sTxt) : 0;
+  let endSec = eTxt ? timeToSeconds(eTxt) : (videoEl.duration || 0);
+  if (isNaN(startSec)) startSec = 0;
+  if (isNaN(endSec) || !endSec) endSec = videoEl.duration || 0;
+  if (videoEl.duration && endSec > videoEl.duration) endSec = videoEl.duration;
+  return { startSec, endSec };
+}
+
+function stopPauseWork() {
+  window.pauseCancel = true;
+  const b = document.getElementById('pauseStopBtn');
+  b.textContent = 'Parando...';
+  b.disabled = true;
+}
+
+const PAUSE_WORKLET_CODE = `
+class RmsProcessor extends AudioWorkletProcessor {
+  constructor() { super(); this.acc = 0; this.n = 0; }
+  process(inputs) {
+    const input = inputs[0];
+    if (input && input.length) {
+      for (let c = 0; c < input.length; c++) {
+        const ch = input[c];
+        for (let i = 0; i < ch.length; i++) this.acc += ch[i] * ch[i];
+        this.n += ch.length;
+      }
+      if (this.n >= 2048) {
+        this.port.postMessage(Math.sqrt(this.acc / this.n));
+        this.acc = 0; this.n = 0;
+      }
+    }
+    return true;
+  }
+}
+registerProcessor('rms-processor', RmsProcessor);
+`;
+
+window.analyzePauses = async function () {
+  const mainVideo = document.getElementById('videoPreview');
+  const btn = document.getElementById('pauseAnalyzeBtn');
+  const genBtn = document.getElementById('pauseGenBtn');
+  const status = document.getElementById('pauseStatus');
+  const stopBtn = document.getElementById('pauseStopBtn');
+
+  if (!window.currentVideoFile) {
+    alert('Escolhe o vídeo primeiro lá em cima (etapa 1).');
+    return;
+  }
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC || !window.AudioWorkletNode) {
+    alert('Seu navegador não suporta essa análise. Tenta pelo Chrome.');
+    return;
+  }
+
+  const { startSec, endSec } = getPauseRange(mainVideo);
+  if (!(endSec > startSec)) {
+    alert('Confere os campos "A partir de / Até" na etapa 3 — o fim precisa ser depois do início.');
+    return;
+  }
+  const rate = parseFloat(document.getElementById('pauseSpeed').value) || 2;
+  const dur = endSec - startSec;
+  if (dur > 20 * 60 && !confirm(`Esse trecho tem ${Math.round(dur / 60)} min. A análise leva uns ${Math.round(dur / rate / 60)} min e a geração outros ${Math.round(dur / 60)} min. Continuar?\n\n(Dica: use "A partir de / Até" na etapa 3 pra pegar só um pedaço.)`)) {
+    return;
+  }
+
+  window.pauseCancel = false;
+  btn.disabled = true;
+  if (genBtn) genBtn.disabled = true;
+  stopBtn.style.display = 'block';
+  stopBtn.disabled = false;
+  stopBtn.textContent = '⏹ Parar';
+  document.getElementById('pauseResults').style.display = 'none';
+  document.getElementById('pauseGenBox').style.display = 'none';
+  document.getElementById('pauseOutBox').style.display = 'none';
+  status.textContent = 'Preparando a análise...';
+  keepScreenOn();
+
+  let ctx = null, vid = null, url = null;
+  try {
+    ctx = new AC();
+    await ctx.resume();
+    const modUrl = URL.createObjectURL(new Blob([PAUSE_WORKLET_CODE], { type: 'application/javascript' }));
+    await ctx.audioWorklet.addModule(modUrl);
+    URL.revokeObjectURL(modUrl);
+
+    // cópia oculta do vídeo, só pra "ouvir" o áudio sem mexer no player da tela
+    url = URL.createObjectURL(window.currentVideoFile);
+    vid = document.createElement('video');
+    vid.style.cssText = 'position:fixed;left:-10px;top:-10px;width:2px;height:2px;opacity:0;pointer-events:none;';
+    vid.playsInline = true;
+    vid.preload = 'auto';
+    const ready = new Promise((res, rej) => {
+      vid.onloadedmetadata = res;
+      vid.onerror = () => rej(new Error('Não consegui abrir o vídeo pra análise.'));
+    });
+    vid.src = url;
+    document.body.appendChild(vid);
+    await ready;
+
+    if (startSec > 0.05) await seekVideo(vid, startSec);
+
+    const src = ctx.createMediaElementSource(vid);
+    const node = new AudioWorkletNode(ctx, 'rms-processor');
+    src.connect(node);
+    node.connect(ctx.destination); // o processador não repassa o áudio, então não sai som
+
+    const rms = [];
+    const anchors = [];
+    node.port.onmessage = (e) => {
+      rms.push(e.data);
+      if (rms.length % 30 === 1) anchors.push([rms.length - 1, vid.currentTime]);
+    };
+
+    vid.playbackRate = rate;
+    await vid.play();
+
+    await new Promise((resolve) => {
+      const iv = setInterval(() => {
+        const t = vid.currentTime;
+        const pct = Math.min(100, Math.max(0, Math.round(((t - startSec) / dur) * 100)));
+        status.textContent = `Analisando o áudio... ${pct}%`;
+        if (window.pauseCancel || t >= endSec - 0.05 || vid.ended) {
+          clearInterval(iv);
+          resolve();
+        }
+      }, 250);
+    });
+    vid.pause();
+    const cancelled = window.pauseCancel;
+
+    if (rms.length < 60 || anchors.length < 2) {
+      throw new Error('O trecho analisado ficou curto demais (ou o vídeo não tem áudio).');
+    }
+    const fit = fitLine(anchors);
+    if (!(fit.slope > 0)) throw new Error('Não consegui alinhar o tempo do áudio.');
+
+    const frames = rms.map((r, k) => ({ t: fit.icpt + fit.slope * k, db: 20 * Math.log10(r + 1e-8) }));
+    const lastT = frames[frames.length - 1].t;
+
+    window.pauseState = {
+      startSec,
+      endSec: cancelled ? Math.min(endSec, lastT) : endSec,
+      frames,
+      frameDur: fit.slope,
+      regions: []
+    };
+    computePauseRegions();
+    renderPauseResults();
+    status.textContent = cancelled
+      ? `Análise parada — cobre até ${fmtTenths(window.pauseState.endSec)}.`
+      : 'Análise concluída.';
+  } catch (err) {
+    console.error(err);
+    alert('Erro na análise: ' + err.message);
+    status.textContent = 'A análise falhou.';
+  } finally {
+    try { if (vid) { vid.pause(); vid.remove(); } } catch (e) {}
+    try { if (url) URL.revokeObjectURL(url); } catch (e) {}
+    try { if (ctx) ctx.close(); } catch (e) {}
+    releaseScreenOn();
+    btn.disabled = false;
+    if (genBtn) genBtn.disabled = false;
+    stopBtn.style.display = 'none';
+  }
+};
+
+function computePauseRegions() {
+  const st = window.pauseState;
+  if (!st || !st.frames.length) return;
+  const minPause = parseFloat(document.getElementById('pauseMin').value) || 1;
+  const keep = parseFloat(document.getElementById('pauseKeep').value) || 0.5;
+  const frac = parseFloat(document.getElementById('pauseSens').value) || 0.25;
+
+  const frames = st.frames;
+  const dbs = frames.map(f => f.db).sort((a, b) => a - b);
+  const pick = p => dbs[Math.min(dbs.length - 1, Math.floor(p * (dbs.length - 1)))];
+  const floor = pick(0.10);
+  const peak = pick(0.90);
+  st.floorDb = floor;
+  st.peakDb = peak;
+  st.regions = [];
+  st.lowContrast = false;
+
+  if (peak - floor < 8) { st.lowContrast = true; return; }
+
+  const thr = floor + frac * (peak - floor);
+  st.thrDb = thr;
+  const silent = frames.map(f => f.db < thr);
+
+  // "estalos" curtos de som (menos de 0,1 s) no meio de um silêncio não contam como fala
+  const maxBlip = Math.max(1, Math.round(0.1 / st.frameDur));
+  let i = 0;
+  while (i < silent.length) {
+    if (!silent[i]) {
+      let j = i;
+      while (j < silent.length && !silent[j]) j++;
+      if (j - i <= maxBlip && i > 0 && j < silent.length) {
+        for (let k = i; k < j; k++) silent[k] = true;
+      }
+      i = j;
+    } else {
+      i++;
+    }
+  }
+
+  const pad = keep / 2;
+  const minCut = Math.max(minPause, keep + 0.25);
+  i = 0;
+  while (i < silent.length) {
+    if (silent[i]) {
+      let j = i;
+      while (j < silent.length && silent[j]) j++;
+      const s = Math.max(st.startSec, frames[i].t - st.frameDur / 2);
+      const e = Math.min(st.endSec, frames[j - 1].t + st.frameDur / 2);
+      if (e - s >= minCut) {
+        st.regions.push({ s, e, cs: s + pad, ce: e - pad, on: true });
+      }
+      i = j;
+    } else {
+      i++;
+    }
+  }
+}
+
+function updatePauseSummary() {
+  const st = window.pauseState;
+  const sum = document.getElementById('pauseSummary');
+  const on = st.regions.filter(r => r.on);
+  const removed = on.reduce((a, r) => a + (r.ce - r.cs), 0);
+  const total = st.endSec - st.startSec;
+  sum.innerHTML = `Achei <b>${st.regions.length}</b> pausas · marcadas: <b>${on.length}</b> · vai tirar <b>${removed.toFixed(1)}s</b><br>O trecho de ${fmtTenths(total)} fica com ~${fmtTenths(total - removed)}.`;
+}
+
+function renderPauseResults() {
+  const st = window.pauseState;
+  const box = document.getElementById('pauseResults');
+  const list = document.getElementById('pauseList');
+  const sum = document.getElementById('pauseSummary');
+  const genBox = document.getElementById('pauseGenBox');
+  box.style.display = 'block';
+
+  if (st.lowContrast) {
+    sum.textContent = 'Não achei pausas claras nesse áudio (o volume é quase constante — pode ter música ou ruído de fundo forte). Tenta outro trecho.';
+    list.innerHTML = '';
+    genBox.style.display = 'none';
+    return;
+  }
+  if (!st.regions.length) {
+    sum.textContent = 'Nenhuma pausa maior que o tempo escolhido. Tenta diminuir o "Pausas maiores que" ou usar "Cortar mais".';
+    list.innerHTML = '';
+    genBox.style.display = 'none';
+    return;
+  }
+
+  list.innerHTML = st.regions.map((r, i) => `
+    <div class="pause-item">
+      <label>
+        <input type="checkbox" ${r.on ? 'checked' : ''} onchange="togglePauseRegion(${i}, this.checked)">
+        <span><span class="mono">${fmtTenths(r.s)} → ${fmtTenths(r.e)}</span> <span class="pause-len">(−${(r.ce - r.cs).toFixed(1)}s)</span></span>
+      </label>
+      <button type="button" class="pause-listen" onclick="previewPauseRegion(${i})">▶ ouvir</button>
+    </div>
+  `).join('');
+  updatePauseSummary();
+  genBox.style.display = 'block';
+}
+
+function recomputePauses() {
+  if (window.pauseState && window.pauseState.frames) {
+    computePauseRegions();
+    renderPauseResults();
+  }
+}
+
+function togglePauseRegion(i, checked) {
+  window.pauseState.regions[i].on = checked;
+  updatePauseSummary();
+}
+
+function setAllPauses(on) {
+  const st = window.pauseState;
+  if (!st) return;
+  st.regions.forEach(r => { r.on = on; });
+  renderPauseResults();
+}
+
+window.previewPauseRegion = async function (i) {
+  const st = window.pauseState;
+  const r = st && st.regions[i];
+  const v = document.getElementById('videoPreview');
+  if (!r || !window.currentVideoFile) return;
+
+  if (window._pvIv) { clearInterval(window._pvIv); window._pvIv = null; }
+  v.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  v.muted = false;
+  v.playbackRate = 1;
+  const from = Math.max(0, r.cs - 2);
+  const to = r.ce + 2;
+  await seekVideo(v, from);
+  let jumped = false;
+  try { await v.play(); } catch (e) { return; }
+  window._pvIv = setInterval(() => {
+    const t = v.currentTime;
+    if (!jumped && t >= r.cs) {
+      jumped = true;
+      v.currentTime = r.ce;
+    } else if (jumped && t >= to) {
+      v.pause();
+      clearInterval(window._pvIv);
+      window._pvIv = null;
+    }
+  }, 20);
+};
+
+window.generatePauseCutVideo = async function () {
+  const st = window.pauseState;
+  const v = document.getElementById('videoPreview');
+  const btn = document.getElementById('pauseGenBtn');
+  const anBtn = document.getElementById('pauseAnalyzeBtn');
+  const stopBtn = document.getElementById('pauseStopBtn');
+  const status = document.getElementById('pauseStatus');
+
+  if (!st) return;
+  if (!window.currentVideoFile) {
+    alert('Escolhe o vídeo primeiro lá em cima (etapa 1).');
+    return;
+  }
+  if (!v.captureStream) {
+    alert('Seu navegador não suporta essa forma de gravação. Tenta pelo Chrome.');
+    return;
+  }
+
+  const cuts = st.regions.filter(r => r.on).sort((a, b) => a.cs - b.cs);
+  const startSec = st.startSec;
+  const endSec = st.endSec;
+  const total = endSec - startSec;
+
+  if (window._pvIv) { clearInterval(window._pvIv); window._pvIv = null; }
+  window.pauseCancel = false;
+  btn.disabled = true;
+  anBtn.disabled = true;
+  stopBtn.style.display = 'block';
+  stopBtn.disabled = false;
+  stopBtn.textContent = '⏹ Parar e ficar com o que já gravou';
+  document.getElementById('pauseOutBox').style.display = 'none';
+  status.textContent = 'Preparando a gravação...';
+  keepScreenOn();
+
+  let recorder = null;
+  try {
+    v.pause();
+    await seekVideo(v, startSec);
+
+    const stream = v.captureStream();
+    let mimeType = 'video/webm;codecs=vp9,opus';
+    if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/webm;codecs=vp8,opus';
+    if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/webm';
+
+    recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 2500000, audioBitsPerSecond: 96000 });
+    const chunks = [];
+    recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+    const stopped = new Promise((res) => { recorder.onstop = res; });
+
+    v.muted = false;
+    v.playbackRate = 1;
+    recorder.start(1000);
+    await v.play();
+
+    let idx = 0;
+    let busy = false;
+    await new Promise((resolve) => {
+      const iv = setInterval(async () => {
+        if (busy) return;
+        const t = v.currentTime;
+        while (idx < cuts.length && cuts[idx].ce <= t) idx++;
+        if (window.pauseCancel || t >= endSec - 0.03 || v.ended) {
+          clearInterval(iv);
+          resolve();
+          return;
+        }
+        status.textContent = `Gravando o vídeo sem pausas... ${Math.min(100, Math.max(0, Math.round(((t - startSec) / total) * 100)))}%`;
+        if (idx < cuts.length && t >= cuts[idx].cs) {
+          busy = true;
+          const c = cuts[idx];
+          idx++;
+          try {
+            if (recorder.state === 'recording') recorder.pause();
+            v.pause();
+            await seekVideo(v, c.ce);
+            await v.play();
+            if (recorder.state === 'paused') recorder.resume();
+          } catch (err) {
+            console.error(err);
+          }
+          busy = false;
+        }
+      }, 20);
+    });
+
+    v.pause();
+    if (recorder.state !== 'inactive') recorder.stop();
+    await stopped;
+
+    const blob = new Blob(chunks, { type: mimeType });
+    if (window.pauseOutUrl) URL.revokeObjectURL(window.pauseOutUrl);
+    window.pauseOutUrl = URL.createObjectURL(blob);
+    window.pauseOutSize = blob.size;
+    document.getElementById('pauseOutVideo').src = window.pauseOutUrl;
+    document.getElementById('pauseOutBox').style.display = 'block';
+    status.textContent = `Pronto! (${(blob.size / 1048576).toFixed(0)} MB) Confere abaixo e baixa se estiver bom.`;
+  } catch (err) {
+    console.error(err);
+    alert('Erro ao gerar o vídeo: ' + err.message);
+    status.textContent = 'A geração falhou.';
+    try { if (recorder && recorder.state !== 'inactive') recorder.stop(); } catch (e) {}
+    try { v.pause(); } catch (e) {}
+  } finally {
+    releaseScreenOn();
+    btn.disabled = false;
+    anBtn.disabled = false;
+    stopBtn.style.display = 'none';
+  }
+};
+
+function downloadPauseVideo() {
+  if (!window.pauseOutUrl) return;
+  const base = (window.currentVideoFile ? window.currentVideoFile.name : 'video').replace(/\.[^.]+$/, '').replace(/[^\w\s-]/g, '').slice(0, 50);
+  const a = document.createElement('a');
+  a.href = window.pauseOutUrl;
+  a.download = (base || 'video') + '-sem-pausas.webm';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+</script>
 
 <script>
 if ('serviceWorker' in navigator) {
