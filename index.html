@@ -2,7 +2,12 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cortador IA">
+<meta name="application-name" content="Cortador IA">
 <title>Cortador IA — Protótipo</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#ff5a2e">
@@ -426,9 +431,189 @@
     cursor: pointer;
     flex-shrink: 0;
   }
+
+  #splash {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: var(--bg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: opacity 0.4s ease;
+  }
+  #splash.hide {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .splash-scene { width: 220px; height: auto; overflow: visible; }
+  .splash-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: 0.04em;
+    color: var(--text);
+    text-align: center;
+    margin-top: 18px;
+    opacity: 0;
+    animation: splashTitleIn 0.5s ease forwards;
+    animation-delay: 1.05s;
+  }
+  .strip-top, .strip-bottom { transition: transform 0.35s ease; }
+  #splash.cut .strip-top { transform: translateY(-13px) rotate(-1.5deg); }
+  #splash.cut .strip-bottom { transform: translateY(13px) rotate(1.5deg); }
+  .scissors {
+    transform-origin: 150px 70px;
+    animation: scissorsMove 1.05s cubic-bezier(.45,0,.2,1) forwards;
+  }
+  .scissors .blade {
+    transform-origin: 4px 70px;
+    animation: scissorsSnip 0.22s ease-in-out infinite alternate;
+  }
+  @keyframes scissorsMove {
+    0%   { transform: translateX(-26px); }
+    100% { transform: translateX(300px); }
+  }
+  @keyframes scissorsSnip {
+    0%   { transform: rotate(-9deg); }
+    100% { transform: rotate(9deg); }
+  }
+  @keyframes splashTitleIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  #installBanner {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    z-index: 500;
+    background: var(--panel-2);
+    border: 1px solid var(--accent-dim);
+    border-radius: 12px;
+    padding: 14px;
+    display: none;
+    align-items: center;
+    gap: 12px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    transform: translateY(0);
+    transition: transform 0.25s ease, opacity 0.25s ease;
+  }
+  #installBanner.show { display: flex; }
+  #installBanner.hide { transform: translateY(16px); opacity: 0; }
+  #installBanner .install-icon {
+    font-size: 22px;
+    flex-shrink: 0;
+    background: var(--accent-dim);
+    color: var(--accent);
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  #installBanner .install-text { flex: 1; min-width: 0; }
+  #installBanner .install-title {
+    font-weight: 700;
+    font-size: 13px;
+    margin-bottom: 2px;
+  }
+  #installBanner .install-sub {
+    font-size: 11.5px;
+    color: var(--text-dim);
+    line-height: 1.4;
+  }
+  #installBanner .install-btn {
+    background: var(--accent);
+    color: #0d0f10;
+    border: none;
+    border-radius: 8px;
+    padding: 9px 14px;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 12.5px;
+    cursor: pointer;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  #installBanner .install-close {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 16px;
+    cursor: pointer;
+    flex-shrink: 0;
+    padding: 4px;
+    line-height: 1;
+  }
 </style>
 </head>
 <body>
+
+<div id="splash" role="presentation" aria-hidden="true">
+  <div style="display:flex; flex-direction:column; align-items:center;">
+    <svg class="splash-scene" viewBox="0 0 300 140" xmlns="http://www.w3.org/2000/svg">
+      <g class="strip-top">
+        <rect x="-10" y="54" width="330" height="20" rx="4" fill="var(--accent-dim)"/>
+        <rect x="-10" y="54" width="330" height="20" rx="4" fill="none" stroke="var(--accent)" stroke-width="1.5"/>
+        <g fill="var(--bg)">
+          <rect x="6" y="59" width="9" height="9" rx="1.5"/>
+          <rect x="33" y="59" width="9" height="9" rx="1.5"/>
+          <rect x="60" y="59" width="9" height="9" rx="1.5"/>
+          <rect x="87" y="59" width="9" height="9" rx="1.5"/>
+          <rect x="114" y="59" width="9" height="9" rx="1.5"/>
+          <rect x="141" y="59" width="9" height="9" rx="1.5"/>
+          <rect x="168" y="59" width="9" height="9" rx="1.5"/>
+          <rect x="195" y="59" width="9" height="9" rx="1.5"/>
+          <rect x="222" y="59" width="9" height="9" rx="1.5"/>
+          <rect x="249" y="59" width="9" height="9" rx="1.5"/>
+          <rect x="276" y="59" width="9" height="9" rx="1.5"/>
+        </g>
+      </g>
+      <g class="strip-bottom">
+        <rect x="-10" y="76" width="330" height="20" rx="4" fill="var(--accent-dim)"/>
+        <rect x="-10" y="76" width="330" height="20" rx="4" fill="none" stroke="var(--accent)" stroke-width="1.5"/>
+        <g fill="var(--bg)">
+          <rect x="6" y="81" width="9" height="9" rx="1.5"/>
+          <rect x="33" y="81" width="9" height="9" rx="1.5"/>
+          <rect x="60" y="81" width="9" height="9" rx="1.5"/>
+          <rect x="87" y="81" width="9" height="9" rx="1.5"/>
+          <rect x="114" y="81" width="9" height="9" rx="1.5"/>
+          <rect x="141" y="81" width="9" height="9" rx="1.5"/>
+          <rect x="168" y="81" width="9" height="9" rx="1.5"/>
+          <rect x="195" y="81" width="9" height="9" rx="1.5"/>
+          <rect x="222" y="81" width="9" height="9" rx="1.5"/>
+          <rect x="249" y="81" width="9" height="9" rx="1.5"/>
+          <rect x="276" y="81" width="9" height="9" rx="1.5"/>
+        </g>
+      </g>
+
+      <g class="scissors">
+        <g class="blade" style="animation-delay:0s;">
+          <path d="M4 70 L70 62" stroke="var(--text)" stroke-width="3.5" stroke-linecap="round"/>
+          <circle cx="4" cy="70" r="7" fill="none" stroke="var(--text)" stroke-width="3.5"/>
+        </g>
+        <g class="blade" style="animation-delay:0.11s; animation-direction:alternate-reverse;">
+          <path d="M4 70 L70 78" stroke="var(--text)" stroke-width="3.5" stroke-linecap="round"/>
+          <circle cx="4" cy="70" r="7" fill="none" stroke="var(--text)" stroke-width="3.5"/>
+        </g>
+      </g>
+    </svg>
+    <div class="splash-title mono">CORTADOR IA</div>
+  </div>
+</div>
+
+<div id="installBanner">
+  <div class="install-icon">📲</div>
+  <div class="install-text">
+    <div class="install-title">Instalar o Cortador IA</div>
+    <div class="install-sub" id="installSub">Adiciona o app na sua tela inicial pra abrir rapidinho, sem navegador.</div>
+  </div>
+  <button type="button" class="install-btn" id="installActionBtn" onclick="handleInstallClick()">Instalar</button>
+  <button type="button" class="install-close" onclick="dismissInstallBanner()" aria-label="Fechar">✕</button>
+</div>
 
 <header>
   <div class="eyebrow">Protótipo · v0.1</div>
@@ -561,6 +746,13 @@
     <div id="screenshotName" class="note" style="border-top:none; margin-top:0; padding-top:0; display:none; margin-bottom: 10px;"></div>
 
     <button type="button" class="primary" id="titleSearchBtn" onclick="suggestByTitle()" style="background: var(--panel-2); color: var(--accent); border: 1px solid var(--accent-dim);">Buscar trecho que combine</button>
+
+    <div class="pause-item" style="margin-top:16px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2);">
+      <label>
+        <input type="checkbox" id="verticalFormatToggle">
+        <span>Baixar cortes em <b>vertical 9:16</b> (Reels/TikTok/Shorts) — corta as bordas mantendo o centro do vídeo</span>
+      </label>
+    </div>
 
     <div class="results" id="results">
       <div class="empty">Os cortes sugeridos vão aparecer aqui</div>
@@ -1333,6 +1525,71 @@ function renderClips(clips, historyIndex) {
 }
 
 refreshLibraryUI();
+
+(function () {
+  const splash = document.getElementById('splash');
+  if (!splash) return;
+  const finish = () => {
+    splash.classList.add('hide');
+    setTimeout(() => splash.remove(), 450);
+  };
+  setTimeout(() => splash.classList.add('cut'), 580);
+  const t = setTimeout(finish, 1650);
+  splash.addEventListener('click', () => { clearTimeout(t); finish(); });
+})();
+
+// ---- banner de instalar como app ----
+let deferredInstallPrompt = null;
+
+function isStandalone() {
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+
+function isIOS() {
+  return /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+}
+
+function showInstallBanner() {
+  if (isStandalone()) return; // já instalado, não mostra
+  if (localStorage.getItem('installBannerDismissed') === '1') return;
+  document.getElementById('installBanner').classList.add('show');
+}
+
+function dismissInstallBanner() {
+  const banner = document.getElementById('installBanner');
+  banner.classList.add('hide');
+  setTimeout(() => banner.classList.remove('show', 'hide'), 300);
+  localStorage.setItem('installBannerDismissed', '1');
+}
+
+function handleInstallClick() {
+  if (deferredInstallPrompt) {
+    deferredInstallPrompt.prompt();
+    deferredInstallPrompt.userChoice.finally(() => {
+      deferredInstallPrompt = null;
+      dismissInstallBanner();
+    });
+  } else if (isIOS()) {
+    alert('Pra instalar no iPhone:\n\n1. Toque no ícone de Compartilhar (o quadrado com a seta pra cima), na barra do navegador\n2. Escolha "Adicionar à Tela de Início"\n3. Toque em "Adicionar"');
+  } else {
+    alert('Pra instalar: abre o menu do navegador (⋮) e escolhe "Instalar app" ou "Adicionar à tela inicial".');
+  }
+}
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  showInstallBanner();
+});
+
+window.addEventListener('appinstalled', () => {
+  dismissInstallBanner();
+});
+
+if (isIOS() && !isStandalone()) {
+  document.getElementById('installSub').textContent = 'Toque em Compartilhar → "Adicionar à Tela de Início" pra usar como app.';
+  setTimeout(showInstallBanner, 2200);
+}
 </script>
 
 </body>
@@ -1609,9 +1866,28 @@ async function previewClip(suffix) {
   videoEl.play();
 }
 
+function getVerticalCropRect(videoW, videoH) {
+  const targetAspect = 9 / 16;
+  const sourceAspect = videoW / videoH;
+  if (sourceAspect > targetAspect) {
+    // vídeo mais largo que 9:16 — corta as laterais, mantém a altura toda
+    const sh = videoH;
+    const sw = sh * targetAspect;
+    const sx = (videoW - sw) / 2;
+    return { sx, sy: 0, sw, sh };
+  } else {
+    // vídeo mais estreito que 9:16 (ou já vertical) — corta em cima/embaixo
+    const sw = videoW;
+    const sh = sw / targetAspect;
+    const sy = (videoH - sh) / 2;
+    return { sx: 0, sy, sw, sh };
+  }
+}
+
 window.cutClip = async function (title, idx) {
   const btn = document.getElementById('cutBtn' + idx);
   const videoEl = document.getElementById('videoPreview');
+  const vertical = document.getElementById('verticalFormatToggle').checked;
 
   if (!window.currentVideoFile) {
     alert('Escolhe o vídeo primeiro lá em cima (etapa 1).');
@@ -1633,6 +1909,9 @@ window.cutClip = async function (title, idx) {
   btn.disabled = true;
   btn.textContent = 'Preparando...';
 
+  let rafId = null;
+  let canvas = null;
+
   try {
     videoEl.pause();
     await new Promise((resolve) => {
@@ -1642,13 +1921,32 @@ window.cutClip = async function (title, idx) {
       setTimeout(resolve, 1500);
     });
 
-    const stream = videoEl.captureStream();
+    let stream;
+    if (vertical) {
+      canvas = document.createElement('canvas');
+      canvas.width = 720;
+      canvas.height = 1280;
+      const ctx = canvas.getContext('2d');
+      const crop = getVerticalCropRect(videoEl.videoWidth, videoEl.videoHeight);
+
+      const drawFrame = () => {
+        ctx.drawImage(videoEl, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, canvas.width, canvas.height);
+        rafId = requestAnimationFrame(drawFrame);
+      };
+      drawFrame();
+
+      const canvasStream = canvas.captureStream(30);
+      const audioTracks = videoEl.captureStream().getAudioTracks();
+      stream = new MediaStream([...canvasStream.getVideoTracks(), ...audioTracks]);
+    } else {
+      stream = videoEl.captureStream();
+    }
 
     let mimeType = 'video/webm;codecs=vp9,opus';
     if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/webm;codecs=vp8,opus';
     if (!MediaRecorder.isTypeSupported(mimeType)) mimeType = 'video/webm';
 
-    const recorder = new MediaRecorder(stream, { mimeType });
+    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 2500000 });
     const chunks = [];
     recorder.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
 
@@ -1673,12 +1971,13 @@ window.cutClip = async function (title, idx) {
     });
 
     await recordingDone;
+    if (rafId) cancelAnimationFrame(rafId);
 
     const blob = new Blob(chunks, { type: mimeType });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = (title || 'corte').slice(0, 60).replace(/[^\w\s-]/g, '') + '.webm';
+    a.download = (title || 'corte').slice(0, 60).replace(/[^\w\s-]/g, '') + (vertical ? '-vertical' : '') + '.webm';
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -1689,6 +1988,7 @@ window.cutClip = async function (title, idx) {
     alert('Erro ao cortar: ' + err.message);
     btn.textContent = 'Erro — tenta de novo';
   } finally {
+    if (rafId) cancelAnimationFrame(rafId);
     btn.disabled = false;
     setTimeout(() => { btn.textContent = originalText; }, 3000);
   }
